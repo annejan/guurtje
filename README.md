@@ -1,4 +1,4 @@
-# guurtje — round LED disc simulator
+# Guurtje — round LED disc simulator
 
 Browser preview for projecting images / GIFs / video onto circular WS2812
 LED discs (concentric rings), so you can see what a picture looks like on the
