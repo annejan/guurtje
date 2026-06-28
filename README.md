@@ -16,6 +16,15 @@ Open **`ring241-sim.html`** in any browser. Single file, no build, works offline
 
 *Both supported lamps running the same source: Ring241 (241) vs StopNu (405).*
 
+### Spiral ordering
+
+A continuous spiral threaded through every LED (ring-bucket by radius, then by
+angle) — center to rim — for both lamps. StopNu's *actual* WS2812 wiring order
+(D1→D405) already traces this spiral, since it is wired ring by ring.
+
+![Spiral through both lamps](preview/spiral_smooth_both.png)
+![Spiral chase](preview/spiral_chase_both.gif)
+
 | Test grid (calibration) | Rainbow, polar wrap | Ring241 (241 leds) |
 |---|---|---|
 | ![](preview/03_stopnu_testgrid.png) | ![](preview/04_stopnu_rainbow_polar.png) | ![](preview/01_ring241_nyan.png) |
