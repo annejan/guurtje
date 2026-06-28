@@ -143,10 +143,22 @@ def main():
     ap.add_argument("--fps", type=float, default=30)
     ap.add_argument("--frames", type=int, default=0, help="0 = loop forever")
     ap.add_argument("--brightness", type=float, default=1.0)
+    ap.add_argument("--gamma", type=float, default=None,
+                    help="gamma for 8-bit WS2812 output; default 2.2 for spi/preview, "
+                         "1.0 for WLED backends (WLED applies its own). Use 1 to disable.")
+    ap.add_argument("--dither", action="store_true",
+                    help="temporal error-diffusion dither — smooths low-brightness banding")
     ap.add_argument("--preview-dir", default="preview_frames")
     a = ap.parse_args()
     if not a.effect and not a.image:
         ap.error("give --effect or --image")
+    if a.gamma is None:
+        a.gamma = 2.2 if a.out in ("spi", "preview") else 1.0
+    if a.gamma != 1.0 and a.out in ("ddp", "dnrgb", "wled-json"):
+        print("note: applying gamma %.2f AND WLED may gamma too (double). "
+              "Pass --gamma 1, or disable gamma in WLED." % a.gamma, file=sys.stderr)
+    glut = (np.linspace(0, 1, 256) ** a.gamma) * 255.0      # 8-bit gamma LUT
+    residual = None                                          # temporal dither carry
 
     m = load_coords(a.coords)
     src = ImageSource(a.image) if a.image else None
@@ -166,8 +178,16 @@ def main():
         while a.frames == 0 or fno < a.frames:
             t = time.time() - t0
             rgb = src.colours(m, fno) if src else EFFECTS[a.effect](m, t)
-            if a.brightness != 1.0:
-                rgb = (rgb.astype(float) * a.brightness).clip(0, 255).astype(np.uint8)
+            lin = glut[rgb] * a.brightness                  # gamma-correct, then brightness
+            if a.dither:
+                if residual is None:
+                    residual = np.zeros_like(lin)
+                lin = lin + residual
+                rgb = np.floor(lin).clip(0, 255)
+                residual = lin - rgb
+                rgb = rgb.astype(np.uint8)
+            else:
+                rgb = np.round(lin).clip(0, 255).astype(np.uint8)
             if a.out == "ddp":        send_ddp(sock, a.host, rgb)
             elif a.out == "dnrgb":    send_dnrgb(sock, a.host, rgb)
             elif a.out == "wled-json":send_wled_json(a.host, rgb)

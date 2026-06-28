@@ -71,6 +71,32 @@ Wiring (Raspberry Pi):
 - 3.3 V→5 V data: a level shifter (74AHCT125) is the safe option; short runs often
   work direct. ESP32 alternative: its RMT/SPI peripheral + the same `--out` over wifi.
 
+## Colour depth — these are 24-bit LEDs
+
+WS2812 are **24-bit, 8/8/8, GRB** — 16.7M colours but only **256 steps per
+channel**. Two things follow:
+
+- **Gamma.** The LED PWM is linear, your eye is not. Without gamma correction,
+  mid-tones look too bright and dim fades band. `disc_driver.py` applies a gamma
+  LUT — default **2.2 for `spi`/`preview`**, **1.0 for the WLED backends** (WLED
+  does its own brightness + optional gamma; don't double it). Override with
+  `--gamma`.
+- **Low end.** Below ~10/255 WS2812 have few distinct levels and shift colour.
+  `--dither` adds temporal error-diffusion: a target of 5.4/255 is sent as a
+  5/6/5/6… sequence that *averages* to 5.4, recovering sub-LSB brightness and
+  killing visible steps in slow dim fades. Costs nothing, needs a steady frame
+  rate.
+
+```bash
+# Pi/SPI: gamma-correct + dither for smooth dim gradients
+python3 disc_driver.py --coords ../data/coords_stopnu.csv --effect rings --out spi --dither
+# DDP to WLED: let WLED do gamma, so keep it linear here
+python3 disc_driver.py --coords ../data/coords_stopnu.csv --effect rings --out ddp --host wled.local --gamma 1
+```
+
+The browser sim has its own **gamma** slider (and brightness/glow) so you can
+preview roughly how a fade lands before wiring.
+
 ## Power (read this)
 
 WS2812 ≈ 60 mA/LED at full white:
