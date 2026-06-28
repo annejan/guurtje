@@ -90,7 +90,7 @@ class ImageSource:
         W, H = fr.size; px = np.asarray(fr)
         asp = W / H
         u = (m["nx"] * 0.5 + 0.5)
-        v = (-m["ny"] / asp * 0.5 + 0.5)                # ny is screen-down; flip back for image
+        v = (m["ny"] / asp * 0.5 + 0.5)                 # ny already screen-down, matches sim
         sx = np.clip((u * W).astype(int), 0, W - 1)
         sy = np.clip((v * H).astype(int), 0, H - 1)
         return px[sy, sx]

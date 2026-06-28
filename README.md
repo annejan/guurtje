@@ -8,6 +8,8 @@ fork for image/GIF effects).
 
 Open **`ring241-sim.html`** in any browser. Single file, no build, works offline.
 
+See **[EXAMPLES.md](EXAMPLES.md)** for ready-made disc designs (pharmacy cross, STOP, Ampelmännchen, …).
+
 ![Nyan Cat on the Bornhack StopNu 405-LED disc](preview/nyan_stopnu.gif)
 
 *Nyan Cat projected on the 405-LED StopNu disc — rendered from the actual tool.*
