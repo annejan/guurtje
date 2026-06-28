@@ -1,2 +1,4 @@
 .claude/
 *.original.md
+__pycache__/
+*.pyc
