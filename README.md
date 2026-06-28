@@ -73,13 +73,18 @@ Adding a built-in model is still one entry in the `MODELS` registry.
 *Left: StopNu's 405 LEDs gridified onto a 37×37 WLED matrix (0 collisions).
 Right: the `rings` geometry effect — concentric rainbow — on the Ring241 disc.*
 
-### Driving real WLED
+### Driving real hardware
 
 The **WLED ledmap.json** button rasterises the active model's LED positions onto
 a square grid and resolves cell collisions, so you get a drop-in 2D ledmap.
 StopNu exports cleanly as **37×37, all 405 LEDs, 0 collisions**. Upload it in
 WLED under *Config → 2D → Set up ledmap*, then any 2D effect (or the WLED-MM
 image/GIF effect) plays on the disc.
+
+To push the *same* effects/images onto real LEDs from a script — over WLED
+realtime **DDP/DNRGB**, the WLED **JSON API** (curl), or **direct hardware SPI**
+on a Raspberry Pi — see **[hardware/HARDWARE.md](hardware/HARDWARE.md)** and
+`hardware/disc_driver.py` (reads the coords in [`data/`](data/)).
 
 ## Notes / TODO
 
