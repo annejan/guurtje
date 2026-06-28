@@ -81,6 +81,10 @@
       <button id="snap">PNG snapshot</button>
       <button id="rec" class="primary">Opname GIF/webm</button>
     </div>
+    <div class="grid2" style="margin-top:8px">
+      <button id="ledmap">WLED ledmap.json</button>
+      <button id="coordsdl">Coords .csv</button>
+    </div>
     <div class="note" id="status">241 leds geladen · 33×33 grid.</div>
     <div class="note">Ledmap: <a href="https://github.com/MoonModules/MM-Effects/blob/master/Ledmaps/Ring241/Ring241%202D33.json" target="_blank">Ring241 2D33</a>. Zelfde map upload je in WLED (Config → 2D → Ledmap) zodat hardware = preview.</div>
   </div>
@@ -157,10 +161,31 @@ const MODELS = {
   ring241:{ label:'Ring241 (WLED ledmap, 241)', build:()=>buildFromGrid(LEDMAP) },
   stopnu: { label:'Bornhack StopNu (PCB, 405)', build:()=>buildFromCoords(STOPNU) },
 };
-let leds=[], model=null;
+let leds=[], model=null, modelKey='ring241';
 function setModel(key){
-  model=MODELS[key].build(); leds=model.leds;
+  modelKey=key; model=MODELS[key].build(); leds=model.leds;
   document.getElementById('status').textContent = leds.length+' leds · '+MODELS[key].label+' · idx 0…'+(leds.length-1);
+}
+
+// ---- Rasterize active model -> WLED 2D ledmap.json ----------------------
+function buildLedmap(){
+  let N=Math.round(1.7*2/model.pitchN); if(N%2===0) N++; N=Math.max(11,Math.min(97,N));
+  const map=new Array(N*N).fill(-1), used=new Array(N*N).fill(false);
+  const cellOf=(nx,ny)=>[ Math.max(0,Math.min(N-1,Math.round((nx*0.5+0.5)*(N-1)))),
+                          Math.max(0,Math.min(N-1,Math.round((ny*0.5+0.5)*(N-1)))) ];
+  let collisions=0;
+  for(const o of [...leds].sort((a,b)=>a.idx-b.idx)){
+    let [c,r]=cellOf(o.nx,o.ny);
+    if(used[r*N+c]){ collisions++; let done=false;
+      for(let rad=1;rad<N&&!done;rad++) for(let dy=-rad;dy<=rad&&!done;dy++) for(let dx=-rad;dx<=rad&&!done;dx++){
+        if(Math.max(Math.abs(dx),Math.abs(dy))!==rad) continue;
+        const cc=c+dx, rr=r+dy; if(cc<0||rr<0||cc>=N||rr>=N||used[rr*N+cc]) continue;
+        c=cc; r=rr; done=true;
+      }
+    }
+    used[r*N+c]=true; map[r*N+c]=o.idx;
+  }
+  return { json:{ n:MODELS[modelKey].label+' '+N+'x'+N, width:N, height:N, map }, N, collisions };
 }
 setModel('ring241');
 
@@ -198,37 +223,40 @@ $('file').onchange=e=>{
 
 // ---- Source renderers ---------------------------------------------------
 function drawNyan(t){
-  xc.fillStyle='#1a0030'; xc.fillRect(0,0,SW,SH);
-  // scrolling star dots
-  xc.fillStyle='#fff';
-  for(let i=0;i<26;i++){ const x=((i*53 - t*40)%SW+SW)%SW; const y=(i*37)%SH; xc.fillRect(x,y,2,2); }
-  // rainbow trail (left side), 6 bands waving
-  const bands=['#ff0000','#ff9900','#ffff00','#33ff00','#0099ff','#6633ff'];
-  const bh=10, x0=0, trailW=84;
-  for(let b=0;b<6;b++){
-    xc.fillStyle=bands[b];
-    for(let x=x0;x<trailW;x+=6){
-      const wob=Math.round(Math.sin((x*0.10)-(t*6))*4);
-      xc.fillRect(x, 44+b*bh+wob, 6, bh);
-    }
+  // deep space + twinkling parallax stars
+  xc.fillStyle='#16002e'; xc.fillRect(0,0,SW,SH);
+  for(let i=0;i<40;i++){
+    const sp=20+(i%3)*22, x=((i*61 - t*sp)%(SW+8)+SW+8)%(SW+8)-4, y=(i*29)%SH;
+    const tw=(Math.sin(t*4+i)>0)?3:2;
+    xc.fillStyle=i%5? '#ffffff':'#bfe0ff'; xc.fillRect(x,y,tw,tw);
   }
-  // poptart body
-  const bob=Math.round(Math.sin(t*6)*3);
-  const bx=78, by=46+bob;
-  xc.fillStyle='#ffb6d5'; xc.fillRect(bx,by,40,30);           // pink frosting
-  xc.fillStyle='#9c5a3c'; xc.fillRect(bx,by,40,30);           // tart edge under
-  xc.fillStyle='#ffb0d0'; xc.fillRect(bx+3,by+3,34,24);       // frosting inset
-  xc.fillStyle='#ff3fa0';                                     // sprinkles
-  for(let i=0;i<10;i++) xc.fillRect(bx+6+((i*11)%30), by+6+((i*7)%18), 2,2);
-  // cat head
-  xc.fillStyle='#9aa0a6'; xc.fillRect(bx+30,by+2,16,18);      // grey head
-  xc.fillStyle='#000'; xc.fillRect(bx+30,by+1,3,3); xc.fillRect(bx+43,by+1,3,3); // ears
-  xc.fillStyle='#fff'; xc.fillRect(bx+34,by+7,3,3); xc.fillRect(bx+40,by+7,3,3); // eyes
-  xc.fillStyle='#000'; xc.fillRect(bx+35,by+8,1,1); xc.fillRect(bx+41,by+8,1,1);
-  xc.fillStyle='#ff7fb0'; xc.fillRect(bx+36,by+12,5,3);       // mouth
-  // legs
-  xc.fillStyle='#7d8288'; const lg=Math.round(Math.sin(t*9)*2);
-  xc.fillRect(bx+4,by+28+lg,4,4); xc.fillRect(bx+30,by+28-lg,4,4);
+  // rainbow trail — 6 stepped bands with the classic staircase wave
+  const bands=['#ff1d1d','#ff9d00','#ffe600','#33dd17','#1f8bff','#9b3bff'];
+  const bh=8, trailW=92, by0=40;
+  for(let seg=0; seg<trailW; seg+=8){
+    const step=Math.round(Math.sin((seg*0.09)-(t*7))*4);
+    for(let b=0;b<6;b++){ xc.fillStyle=bands[b]; xc.fillRect(seg, by0+b*bh+step, 8, bh); }
+  }
+  const bob=Math.round(Math.sin(t*7)*4);
+  const bx=92, by=42+bob;
+  // pop-tart body: tan biscuit edge, pink frosting, sprinkles
+  xc.fillStyle='#b06a2c'; xc.fillRect(bx,by,42,32);
+  xc.fillStyle='#ff8fc6'; xc.fillRect(bx+3,by+3,36,26);
+  const spr=['#ff2e8b','#26d0ff','#ffffff'];
+  for(let i=0;i<14;i++){ xc.fillStyle=spr[i%3]; xc.fillRect(bx+6+((i*13)%30), by+6+((i*9)%20), 3,3); }
+  // grey cat head
+  const hx=bx+34, hy=by+5;
+  xc.fillStyle='#9aa0a6'; xc.fillRect(hx,hy,18,20);
+  xc.fillStyle='#9aa0a6'; xc.fillRect(hx+1,hy-3,4,4); xc.fillRect(hx+13,hy-3,4,4);   // ears
+  xc.fillStyle='#ffb6d5'; xc.fillRect(hx+1,hy+11,4,3); xc.fillRect(hx+13,hy+11,4,3); // cheeks
+  xc.fillStyle='#ffffff'; xc.fillRect(hx+4,hy+5,4,5); xc.fillRect(hx+11,hy+5,4,5);   // eyes
+  xc.fillStyle='#1a1a1a'; xc.fillRect(hx+6,hy+6,2,3); xc.fillRect(hx+13,hy+6,2,3);   // pupils
+  xc.fillStyle='#1a1a1a'; xc.fillRect(hx+7,hy+15,5,2);                               // mouth
+  // 4 paws padding up and down
+  const lg=Math.round(Math.sin(t*10)*2);
+  xc.fillStyle='#7d8288';
+  xc.fillRect(bx+4,by+30+lg,5,4); xc.fillRect(bx+14,by+30-lg,5,4);
+  xc.fillRect(bx+24,by+30+lg,5,4); xc.fillRect(bx+34,by+30-lg,5,4);
 }
 function drawRainbow(t){
   for(let y=0;y<SH;y++){
@@ -265,16 +293,13 @@ function renderSource(t){
 let gLUT=new Uint8Array(256), lastG=-1;
 function lut(g){ if(g===lastG)return; lastG=g; for(let i=0;i<256;i++) gLUT[i]=Math.round(255*Math.pow(i/255,g)); }
 
-// ---- main loop ----------------------------------------------------------
-let spinAng=0, prevT=0;
-function frame(ms){
-  const t=ms/1000; const dt=t-prevT; prevT=t;
+// ---- render one deterministic frame at time t (seconds) -----------------
+function renderFrame(t){
   renderSource(t);
   vctx.drawImage(src,0,0,srcview.width,srcview.height);     // little source preview
   const img=xc.getImageData(0,0,SW,SH).data;
 
-  spinAng += (C.spin*Math.PI/180)*dt;
-  const ang=(C.rot*Math.PI/180)+spinAng;
+  const ang=(C.rot*Math.PI/180)+(C.spin*Math.PI/180)*t;    // spin = deg/s, integrates to spin*t
   const ca=Math.cos(ang), sa=Math.sin(ang);
   const zoom=C.zoom/100, px=C.panx/100, py=C.pany/100;
   lut(C.gamma/100);
@@ -323,12 +348,29 @@ function frame(ms){
     if(C.idx){ sctx.fillStyle='rgba(255,255,255,.6)'; sctx.font=Math.max(6,dotR*1.3|0)+'px monospace';
       sctx.textAlign='center'; sctx.fillText(L.idx,x,y+dotR*0.4); }
   }
-  requestAnimationFrame(frame);
 }
+function frame(ms){ renderFrame(ms/1000); requestAnimationFrame(frame); }
 requestAnimationFrame(frame);
+window.renderFrame=renderFrame;                 // headless deterministic capture hook
+window.SIM={ setModel, leds:()=>leds, model:()=>model, C,
+             setSource:m=>{ sourceMode=m; $('source').value=m; },
+             buildLedmap, render:renderFrame };
 
 // ---- export -------------------------------------------------------------
-$('snap').onclick=()=>{ const a=document.createElement('a'); a.download='ring241.png'; a.href=stage.toDataURL(); a.click(); };
+$('snap').onclick=()=>{ const a=document.createElement('a'); a.download=modelKey+'.png'; a.href=stage.toDataURL(); a.click(); };
+
+$('ledmap').onclick=()=>{
+  const {json,N,collisions}=buildLedmap();
+  const a=document.createElement('a'); a.download='ledmap_'+modelKey+'_'+N+'x'+N+'.json';
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(json)],{type:'application/json'})); a.click();
+  $('status').textContent='ledmap '+N+'×'+N+' · '+leds.length+' leds · '+collisions+' cel-botsing(en) verplaatst';
+};
+$('coordsdl').onclick=()=>{
+  let s='wled_index,nx,ny,r\n';
+  for(const o of [...leds].sort((a,b)=>a.idx-b.idx)) s+=[o.idx,o.nx.toFixed(4),o.ny.toFixed(4),o.r.toFixed(4)].join(',')+'\n';
+  const a=document.createElement('a'); a.download='coords_'+modelKey+'.csv';
+  a.href=URL.createObjectURL(new Blob([s],{type:'text/csv'})); a.click();
+};
 
 let rec=null, chunks=[];
 $('rec').onclick=()=>{

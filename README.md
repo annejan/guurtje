@@ -8,6 +8,14 @@ fork for image/GIF effects).
 
 Open **`ring241-sim.html`** in any browser. Single file, no build, works offline.
 
+![Nyan Cat on the Bornhack StopNu 405-LED disc](preview/nyan_stopnu.gif)
+
+*Nyan Cat projected on the 405-LED StopNu disc — rendered from the actual tool.*
+
+| Test grid (calibration) | Rainbow, polar wrap | Ring241 (241 leds) |
+|---|---|---|
+| ![](preview/03_stopnu_testgrid.png) | ![](preview/04_stopnu_rainbow_polar.png) | ![](preview/01_ring241_nyan.png) |
+
 ## Models
 
 | Model | LEDs | Geometry source |
@@ -26,7 +34,16 @@ Adding a model = one entry in the `MODELS` registry (a grid ledmap →
 - **Drop your own** GIF / image / video → projected onto the disc (animated GIFs animate live)
 - Projection: zoom, pan, spin, angle, cover/1:1, **polar wrap** (image wound around the rings)
 - LED look: brightness, gamma, dot size, glow, index overlay
-- Export: PNG snapshot + WebM screen recording
+- Export: PNG snapshot · WebM recording · **WLED `ledmap.json`** (rasterises the
+  disc to a 2D grid) · raw `coords.csv`
+
+### Driving real WLED
+
+The **WLED ledmap.json** button rasterises the active model's LED positions onto
+a square grid and resolves cell collisions, so you get a drop-in 2D ledmap.
+StopNu exports cleanly as **37×37, all 405 LEDs, 0 collisions**. Upload it in
+WLED under *Config → 2D → Set up ledmap*, then any 2D effect (or the WLED-MM
+image/GIF effect) plays on the disc.
 
 ## Notes / TODO
 
