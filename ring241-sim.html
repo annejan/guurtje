@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ring241 LED Simulator — WLED disc preview</title>
+<style>
+  :root{ --bg:#0b0d12; --panel:#151922; --line:#222a36; --txt:#cdd6e4; --accent:#48c9ff; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--txt); font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif; }
+  header{ padding:10px 16px; border-bottom:1px solid var(--line); display:flex; gap:14px; align-items:baseline; flex-wrap:wrap;}
+  header h1{ font-size:15px; margin:0; font-weight:600; }
+  header .sub{ color:#7d8aa0; font-size:12px;}
+  main{ display:flex; gap:16px; padding:16px; flex-wrap:wrap; }
+  #stage{ background:#000; border:1px solid var(--line); border-radius:12px; }
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; width:320px; }
+  .panel h2{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#8b97ad; margin:0 0 10px;}
+  .row{ display:flex; align-items:center; gap:10px; margin:9px 0;}
+  .row label{ width:108px; color:#9fabc0; font-size:12px;}
+  .row input[type=range]{ flex:1; accent-color:var(--accent);}
+  .row .val{ width:42px; text-align:right; font-variant-numeric:tabular-nums; color:#dfe7f2; font-size:12px;}
+  select,button,input[type=file]{ background:#0f131b; color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:7px 9px; font:inherit;}
+  button{ cursor:pointer; }
+  button:hover{ border-color:var(--accent); }
+  button.primary{ background:var(--accent); color:#04222e; border-color:var(--accent); font-weight:600;}
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .chk{ display:flex; align-items:center; gap:8px; margin:8px 0; color:#9fabc0; font-size:12px;}
+  .note{ color:#6f7c92; font-size:11px; margin-top:8px; line-height:1.5;}
+  a{ color:var(--accent); }
+  .preview{ margin-top:10px; }
+  .preview canvas{ image-rendering:pixelated; width:100%; border:1px solid var(--line); border-radius:6px; background:#000;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ring241 LED Simulator</h1>
+  <span class="sub">241 WS2812 op concentrische ringen · WLED 2D ledmap preview · drop een GIF/afbeelding/video</span>
+</header>
+<main>
+  <canvas id="stage" width="720" height="720"></canvas>
+
+  <div class="panel">
+    <h2>Model</h2>
+    <div class="row">
+      <select id="model" style="flex:1">
+        <option value="ring241">Ring241 — WLED ledmap (241 leds)</option>
+        <option value="stopnu">Bornhack StopNu — PCB coords (405 leds)</option>
+      </select>
+    </div>
+
+    <h2 style="margin-top:14px">Bron</h2>
+    <div class="row">
+      <select id="source" style="flex:1">
+        <option value="nyan">Nyan Cat (ingebouwd)</option>
+        <option value="rainbow">Rainbow spin</option>
+        <option value="testgrid">Test grid / kalibratie</option>
+        <option value="upload">Geüpload bestand</option>
+      </select>
+    </div>
+    <div class="row"><input type="file" id="file" accept="image/*,video/*" style="flex:1"></div>
+    <div class="preview"><canvas id="srcview" width="160" height="120"></canvas></div>
+
+    <h2 style="margin-top:14px">Projectie</h2>
+    <div class="row"><label>Zoom</label><input type="range" id="zoom" min="20" max="300" value="100"><span class="val" id="zoom_v"></span></div>
+    <div class="row"><label>Pan X</label><input type="range" id="panx" min="-100" max="100" value="0"><span class="val" id="panx_v"></span></div>
+    <div class="row"><label>Pan Y</label><input type="range" id="pany" min="-100" max="100" value="0"><span class="val" id="pany_v"></span></div>
+    <div class="row"><label>Spin °/s</label><input type="range" id="spin" min="-180" max="180" value="0"><span class="val" id="spin_v"></span></div>
+    <div class="row"><label>Hoek °</label><input type="range" id="rot" min="0" max="360" value="0"><span class="val" id="rot_v"></span></div>
+    <div class="chk"><input type="checkbox" id="fit" checked><label for="fit" style="width:auto">Vul de disc (cover) — anders 1:1</label></div>
+    <div class="chk"><input type="checkbox" id="polar"><label for="polar" style="width:auto">Polair wikkelen (beeld om ringen)</label></div>
+
+    <h2 style="margin-top:14px">LED look</h2>
+    <div class="row"><label>Helderheid</label><input type="range" id="bri" min="5" max="200" value="100"><span class="val" id="bri_v"></span></div>
+    <div class="row"><label>Gamma</label><input type="range" id="gamma" min="50" max="280" value="220"><span class="val" id="gamma_v"></span></div>
+    <div class="row"><label>LED grootte</label><input type="range" id="size" min="20" max="100" value="62"><span class="val" id="size_v"></span></div>
+    <div class="row"><label>Glow</label><input type="range" id="glow" min="0" max="100" value="55"><span class="val" id="glow_v"></span></div>
+    <div class="chk"><input type="checkbox" id="idx"><label for="idx" style="width:auto">LED-index tonen</label></div>
+
+    <h2 style="margin-top:14px">Export</h2>
+    <div class="grid2">
+      <button id="snap">PNG snapshot</button>
+      <button id="rec" class="primary">Opname GIF/webm</button>
+    </div>
+    <div class="note" id="status">241 leds geladen · 33×33 grid.</div>
+    <div class="note">Ledmap: <a href="https://github.com/MoonModules/MM-Effects/blob/master/Ledmaps/Ring241/Ring241%202D33.json" target="_blank">Ring241 2D33</a>. Zelfde map upload je in WLED (Config → 2D → Ledmap) zodat hardware = preview.</div>
+  </div>
+</main>
+
+<script>
+// ---- Embedded Ring241 ledmap (MoonModules MM-Effects) -------------------
+const LEDMAP = JSON.parse(`{ "n":"Ring241 2D33","width":33,"height":33,"map":[
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,59,0,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,57,-1,58,-1,-1,-1,-1,-1,2,-1,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,55,-1,56,-1,-1,-1,-1,107,60,61,-1,-1,-1,-1,4,-1,5,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,54,-1,-1,-1,105,-1,106,-1,-1,-1,-1,-1,62,-1,63,-1,-1,-1,6,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,53,-1,-1,104,-1,-1,-1,-1,-1,147,108,109,-1,-1,-1,-1,-1,64,-1,-1,7,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,52,-1,-1,-1,103,-1,-1,145,-1,146,-1,-1,-1,-1,-1,110,-1,111,-1,-1,65,-1,-1,-1,8,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,102,-1,-1,144,-1,-1,-1,-1,179,-1,148,-1,149,-1,-1,-1,-1,112,-1,-1,66,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,51,-1,-1,-1,-1,-1,-1,-1,-1,178,-1,-1,-1,-1,-1,-1,150,-1,-1,-1,-1,-1,-1,-1,-1,-1,9,-1,-1,-1,
+-1,-1,50,-1,-1,101,-1,-1,143,-1,-1,177,-1,-1,203,-1,180,-1,181,-1,-1,151,-1,-1,113,-1,-1,67,-1,-1,10,-1,-1,
+-1,-1,-1,-1,100,-1,142,-1,-1,176,-1,-1,202,-1,-1,-1,-1,-1,-1,-1,182,-1,-1,152,-1,114,-1,-1,68,-1,-1,-1,-1,
+-1,-1,49,-1,-1,-1,-1,-1,-1,-1,-1,201,-1,-1,219,-1,204,-1,205,-1,-1,183,-1,-1,-1,-1,-1,-1,-1,-1,11,-1,-1,
+-1,48,-1,99,-1,141,-1,-1,175,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,153,-1,115,-1,-1,69,-1,12,-1,
+-1,-1,-1,98,-1,-1,-1,174,-1,200,-1,-1,218,-1,-1,-1,220,-1,-1,-1,206,-1,-1,184,-1,154,-1,-1,-1,-1,-1,-1,-1,
+-1,47,-1,89,-1,140,-1,-1,-1,-1,-1,-1,-1,-1,231,-1,-1,-1,221,-1,-1,-1,-1,-1,-1,-1,-1,116,-1,70,-1,13,-1,
+-1,-1,-1,-1,139,-1,173,-1,199,-1,-1,217,-1,230,-1,-1,232,-1,-1,222,-1,207,-1,-1,185,-1,155,-1,117,-1,-1,-1,-1,
+46,-1,97,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,239,-1,233,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,71,-1,14,
+45,-1,96,-1,138,-1,172,-1,198,-1,216,-1,229,-1,238,-1,240,-1,234,-1,223,-1,208,-1,186,-1,156,-1,118,-1,72,-1,15,
+44,-1,95,-1,137,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,237,-1,235,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,119,-1,73,-1,16,
+-1,-1,-1,-1,-1,-1,171,-1,197,-1,215,-1,-1,228,-1,-1,236,-1,-1,224,-1,209,-1,-1,187,-1,157,-1,-1,-1,-1,-1,-1,
+43,-1,94,-1,-1,136,-1,170,-1,-1,-1,-1,-1,-1,227,-1,-1,-1,225,-1,-1,-1,-1,-1,-1,158,-1,120,-1,-1,74,-1,17,
+-1,42,-1,-1,-1,-1,-1,-1,-1,196,-1,-1,214,-1,-1,-1,226,-1,-1,-1,210,-1,-1,188,-1,-1,-1,-1,-1,-1,-1,18,-1,
+-1,-1,-1,93,-1,135,-1,-1,169,-1,195,-1,-1,-1,213,-1,-1,-1,211,-1,-1,-1,189,-1,159,-1,-1,121,-1,75,-1,-1,-1,
+-1,41,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,212,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,19,-1,
+-1,-1,-1,-1,92,-1,134,-1,-1,168,-1,-1,194,-1,-1,-1,-1,-1,-1,-1,190,-1,-1,160,-1,-1,122,-1,76,-1,-1,-1,-1,
+-1,-1,40,-1,-1,91,-1,133,-1,-1,-1,167,-1,-1,193,-1,192,-1,191,-1,-1,161,-1,-1,123,-1,-1,77,-1,-1,20,-1,-1,
+-1,-1,-1,39,-1,-1,-1,-1,-1,-1,-1,-1,166,-1,-1,-1,-1,-1,-1,-1,162,-1,-1,-1,-1,-1,-1,-1,-1,21,-1,-1,-1,
+-1,-1,-1,-1,38,-1,90,-1,-1,132,-1,-1,-1,-1,165,-1,164,-1,163,-1,-1,-1,-1,124,-1,-1,78,-1,22,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,89,-1,-1,131,-1,120,-1,-1,-1,-1,-1,126,-1,125,-1,-1,79,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,37,-1,-1,-1,88,-1,-1,-1,130,-1,129,128,127,-1,-1,-1,-1,-1,80,-1,-1,-1,23,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,36,-1,-1,-1,87,-1,-1,-1,-1,-1,-1,-1,-1,-1,81,-1,-1,-1,24,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,35,-1,-1,-1,-1,86,-1,85,84,83,-1,82,-1,-1,-1,-1,25,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,34,33,-1,-1,-1,-1,-1,-1,-1,-1,-1,27,26,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,32,-1,31,30,29,-1,28,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]}`);
+
+// ---- Bornhack StopNu real PCB LED coordinates [idx,x_mm,y_mm] (D1..D405) -
+const STOPNU = [[1,0,0],[2,10.16,0],[3,5.08,8.8],[4,-5.08,8.8],[5,-10.16,0],[6,-5.08,-8.8],[7,5.08,-8.8],[8,20.32,0],[9,17.6,10.16],[10,10.16,17.6],[11,0,20.32],[12,-10.16,17.6],[13,-17.6,10.16],[14,-20.32,0],[15,-17.6,-10.16],[16,-10.16,-17.6],[17,0,-20.32],[18,10.16,-17.6],[19,17.6,-10.16],[20,30.48,0],[21,28.64,10.42],[22,23.35,19.59],[23,15.24,26.4],[24,5.29,30.02],[25,-5.29,30.02],[26,-15.24,26.4],[27,-23.35,19.59],[28,-28.64,10.42],[29,-30.48,0],[30,-28.64,-10.42],[31,-23.35,-19.59],[32,-15.24,-26.4],[33,-5.29,-30.02],[34,5.29,-30.02],[35,15.24,-26.4],[36,23.35,-19.59],[37,28.64,-10.42],[38,40.64,0],[39,39.26,10.52],[40,35.2,20.32],[41,28.74,28.74],[42,20.32,35.2],[43,10.52,39.26],[44,0,40.64],[45,-10.52,39.26],[46,-20.32,35.2],[47,-28.74,28.74],[48,-35.2,20.32],[49,-39.26,10.52],[50,-40.64,0],[51,-39.26,-10.52],[52,-35.2,-20.32],[53,-28.74,-28.74],[54,-20.32,-35.2],[55,-10.52,-39.26],[56,0,-40.64],[57,10.52,-39.26],[58,20.32,-35.2],[59,28.74,-28.74],[60,35.2,-20.32],[61,39.26,-10.52],[62,50.8,0],[63,49.69,10.56],[64,46.41,20.66],[65,41.1,29.86],[66,33.99,37.75],[67,25.4,43.99],[68,15.7,48.31],[69,5.31,50.52],[70,-5.31,50.52],[71,-15.7,48.31],[72,-25.4,43.99],[73,-33.99,37.75],[74,-41.1,29.86],[75,-46.41,20.66],[76,-49.69,10.56],[77,-50.8,0],[78,-49.69,-10.56],[79,-46.41,-20.66],[80,-41.1,-29.86],[81,-33.99,-37.75],[82,-25.4,-43.99],[83,-15.7,-48.31],[84,-5.31,-50.52],[85,5.31,-50.52],[86,15.7,-48.31],[87,25.4,-43.99],[88,33.99,-37.75],[89,41.1,-29.86],[90,46.41,-20.66],[91,49.69,-10.56],[92,60.96,0],[93,60.03,10.59],[94,57.28,20.85],[95,52.79,30.48],[96,46.7,39.18],[97,39.18,46.7],[98,30.48,52.79],[99,20.85,57.28],[100,10.59,60.03],[101,0,60.96],[102,-10.59,60.03],[103,-20.85,57.28],[104,-30.48,52.79],[105,-39.18,46.7],[106,-46.7,39.18],[107,-52.79,30.48],[108,-57.28,20.85],[109,-60.03,10.59],[110,-60.96,0],[111,-60.03,-10.59],[112,-57.28,-20.85],[113,-52.79,-30.48],[114,-46.7,-39.18],[115,-39.18,-46.7],[116,-30.48,-52.79],[117,-20.85,-57.28],[118,-10.59,-60.03],[119,0,-60.96],[120,10.59,-60.03],[121,20.85,-57.28],[122,30.48,-52.79],[123,39.18,-46.7],[124,46.7,-39.18],[125,52.79,-30.48],[126,57.28,-20.85],[127,60.03,-10.59],[128,71.12,0],[129,70.33,10.6],[130,67.96,20.96],[131,64.08,30.85],[132,58.76,40.07],[133,52.13,48.38],[134,44.34,55.6],[135,35.56,61.59],[136,25.98,66.2],[137,15.83,69.34],[138,5.32,70.92],[139,-5.32,70.92],[140,-15.83,69.34],[141,-25.98,66.2],[142,-35.56,61.59],[143,-44.34,55.6],[144,-52.13,48.38],[145,-58.76,40.07],[146,-64.08,30.85],[147,-67.96,20.96],[148,-70.33,10.6],[149,-71.12,0],[150,-70.33,-10.6],[151,-67.96,-20.96],[152,-64.08,-30.85],[153,-58.76,-40.07],[154,-52.13,-48.38],[155,-44.34,-55.6],[156,-35.56,-61.59],[157,-25.98,-66.2],[158,-15.83,-69.34],[159,-5.32,-70.92],[160,5.32,-70.92],[161,15.83,-69.34],[162,25.98,-66.2],[163,35.56,-61.59],[164,44.34,-55.6],[165,52.13,-48.38],[166,58.76,-40.07],[167,64.08,-30.85],[168,67.96,-20.96],[169,70.33,-10.6],[170,81.28,0],[171,80.64,10.19],[172,78.73,20.21],[173,75.57,29.92],[174,71.23,39.16],[175,65.76,47.78],[176,59.25,55.64],[177,51.81,62.63],[178,43.55,68.63],[179,34.61,73.54],[180,25.12,77.3],[181,15.23,79.84],[182,5.1,81.12],[183,-5.1,81.12],[184,-15.23,79.84],[185,-25.12,77.3],[186,-34.61,73.54],[187,-43.55,68.63],[188,-51.81,62.63],[189,-59.25,55.64],[190,-65.76,47.78],[191,-71.23,39.16],[192,-75.57,29.92],[193,-78.73,20.21],[194,-80.64,10.19],[195,-81.28,0],[196,-80.64,-10.19],[197,-78.73,-20.21],[198,-75.57,-29.92],[199,-71.23,-39.16],[200,-65.76,-47.78],[201,-59.25,-55.64],[202,-51.81,-62.63],[203,-43.55,-68.63],[204,-34.61,-73.54],[205,-25.12,-77.3],[206,-15.23,-79.84],[207,-5.1,-81.12],[208,5.1,-81.12],[209,15.23,-79.84],[210,25.12,-77.3],[211,34.61,-73.54],[212,43.55,-68.63],[213,51.81,-62.63],[214,59.25,-55.64],[215,65.76,-47.78],[216,71.23,-39.16],[217,75.57,-29.92],[218,78.73,-20.21],[219,80.64,-10.19],[220,91.44,0],[221,90.86,10.24],[222,89.15,20.35],[223,86.31,30.21],[224,82.39,39.67],[225,77.43,48.65],[226,71.49,57.01],[227,64.66,64.66],[228,57.01,71.49],[229,48.65,77.43],[230,39.67,82.39],[231,30.21,86.31],[232,20.35,89.15],[233,10.24,90.86],[234,0,91.44],[235,-10.24,90.86],[236,-20.35,89.15],[237,-30.21,86.31],[238,-39.67,82.39],[239,-48.65,77.43],[240,-57.01,71.49],[241,-64.66,64.66],[242,-71.49,57.01],[243,-77.43,48.65],[244,-82.39,39.67],[245,-86.31,30.21],[246,-89.15,20.35],[247,-90.86,10.24],[248,-91.44,0],[249,-90.86,-10.24],[250,-89.15,-20.35],[251,-86.31,-30.21],[252,-82.39,-39.67],[253,-77.43,-48.65],[254,-71.49,-57.01],[255,-64.66,-64.66],[256,-57.01,-71.49],[257,-48.65,-77.43],[258,-39.67,-82.39],[259,-30.21,-86.31],[260,-20.35,-89.15],[261,-10.24,-90.86],[262,0,-91.44],[263,10.24,-90.86],[264,20.35,-89.15],[265,30.21,-86.31],[266,39.67,-82.39],[267,48.65,-77.43],[268,57.01,-71.49],[269,64.66,-64.66],[270,71.49,-57.01],[271,77.43,-48.65],[272,82.39,-39.67],[273,86.31,-30.21],[274,89.15,-20.35],[275,90.86,-10.24],[276,101.6,0],[277,101.08,10.28],[278,99.52,20.45],[279,96.94,30.42],[280,93.36,40.07],[281,88.84,49.3],[282,83.39,58.04],[283,77.08,66.19],[284,70,73.64],[285,62.19,80.34],[286,53.75,86.22],[287,44.75,91.22],[288,35.28,95.28],[289,25.47,98.35],[290,15.39,100.43],[291,5.14,101.47],[292,-5.14,101.47],[293,-15.39,100.43],[294,-25.47,98.35],[295,-35.28,95.28],[296,-44.75,91.22],[297,-53.75,86.22],[298,-62.19,80.34],[299,-70,73.64],[300,-77.08,66.19],[301,-83.39,58.04],[302,-88.84,49.3],[303,-93.36,40.07],[304,-96.94,30.42],[305,-99.52,20.45],[306,-101.08,10.28],[307,-101.6,0],[308,-101.08,-10.28],[309,-99.52,-20.45],[310,-96.94,-30.42],[311,-93.36,-40.07],[312,-88.84,-49.3],[313,-83.39,-58.04],[314,-77.08,-66.19],[315,-70,-73.64],[316,-62.19,-80.34],[317,-53.75,-86.22],[318,-44.75,-91.22],[319,-35.28,-95.28],[320,-25.47,-98.35],[321,-15.39,-100.43],[322,-5.14,-101.47],[323,5.14,-101.47],[324,15.39,-100.43],[325,25.47,-98.35],[326,35.28,-95.28],[327,44.75,-91.22],[328,53.75,-86.22],[329,62.19,-80.34],[330,70,-73.64],[331,77.08,-66.19],[332,83.39,-58.04],[333,88.84,-49.3],[334,93.36,-40.07],[335,96.94,-30.42],[336,99.52,-20.45],[337,101.08,-10.28],[338,111.76,0],[339,111.28,10.3],[340,109.86,20.54],[341,107.49,30.58],[342,104.21,40.38],[343,100.04,49.81],[344,95.03,58.83],[345,89.19,67.35],[346,82.6,75.29],[347,75.29,82.6],[348,67.35,89.19],[349,58.83,95.03],[350,49.81,100.04],[351,40.38,104.21],[352,30.58,107.49],[353,20.54,109.86],[354,10.3,111.28],[355,0,111.76],[356,-10.3,111.28],[357,-20.54,109.86],[358,-30.58,107.49],[359,-40.38,104.21],[360,-49.81,100.04],[361,-58.83,95.03],[362,-67.35,89.19],[363,-75.29,82.6],[364,-82.6,75.29],[365,-89.19,67.35],[366,-95.03,58.83],[367,-100.04,49.81],[368,-104.21,40.38],[369,-107.49,30.58],[370,-109.86,20.54],[371,-111.28,10.3],[372,-111.76,0],[373,-111.28,-10.3],[374,-109.86,-20.54],[375,-107.49,-30.58],[376,-104.21,-40.38],[377,-100.04,-49.81],[378,-95.03,-58.83],[379,-89.19,-67.35],[380,-82.6,-75.29],[381,-75.29,-82.6],[382,-67.35,-89.19],[383,-58.83,-95.03],[384,-49.81,-100.04],[385,-40.38,-104.21],[386,-30.58,-107.49],[387,-20.54,-109.86],[388,-10.3,-111.28],[389,0,-111.76],[390,10.3,-111.28],[391,20.54,-109.86],[392,30.58,-107.49],[393,40.38,-104.21],[394,49.81,-100.04],[395,58.83,-95.03],[396,67.35,-89.19],[397,75.29,-82.6],[398,82.6,-75.29],[399,89.19,-67.35],[400,95.03,-58.83],[401,100.04,-49.81],[402,104.21,-40.38],[403,107.49,-30.58],[404,109.86,-20.54],[405,111.28,-10.3]];
+
+// ---- Model builders: produce unified leds[] = {idx, nx, ny, r, a} -------
+// nx,ny in [-1,1] over the disc (screen frame, +y DOWN); r=0..1; a=atan2(ny,nx).
+// idx is the 0-based physical LED index (WLED order).
+function meanNearestNeighbor(L){
+  let sum=0,n=0;
+  for(let i=0;i<L.length;i++){
+    let best=Infinity;
+    for(let j=0;j<L.length;j++){ if(i===j) continue;
+      const d=Math.hypot(L[i].nx-L[j].nx, L[i].ny-L[j].ny); if(d<best) best=d; }
+    if(best<Infinity){ sum+=best; n++; }
+  }
+  return n? sum/n : 0.1;
+}
+function buildFromGrid(spec){               // WLED 2D ledmap: map[row*W+col]=idx, -1=gap
+  const W=spec.width, H=spec.height, L=[];
+  for(let r=0;r<H;r++) for(let c=0;c<W;c++){ const v=spec.map[r*W+c]; if(v>=0) L.push({idx:v,col:c,row:r}); }
+  const cx=(W-1)/2, cy=(H-1)/2; let maxR=1;
+  for(const o of L){ const d=Math.hypot(o.col-cx,o.row-cy); if(d>maxR) maxR=d; }
+  for(const o of L){ o.nx=(o.col-cx)/maxR; o.ny=(o.row-cy)/maxR; o.r=Math.hypot(o.nx,o.ny); o.a=Math.atan2(o.ny,o.nx); }
+  return { leds:L, pitchN:meanNearestNeighbor(L) };
+}
+function buildFromCoords(rows){             // [idx1based, x_mm, y_mm], +y up on PCB
+  let maxR=1; for(const [,x,y] of rows){ const d=Math.hypot(x,y); if(d>maxR) maxR=d; }
+  const L=rows.map(([idx,x,y])=>{ const nx=x/maxR, ny=-y/maxR;   // flip y -> screen down
+    return {idx:idx-1, nx, ny, r:Math.hypot(nx,ny), a:Math.atan2(ny,nx)}; });
+  return { leds:L, pitchN:meanNearestNeighbor(L) };
+}
+const MODELS = {
+  ring241:{ label:'Ring241 (WLED ledmap, 241)', build:()=>buildFromGrid(LEDMAP) },
+  stopnu: { label:'Bornhack StopNu (PCB, 405)', build:()=>buildFromCoords(STOPNU) },
+};
+let leds=[], model=null;
+function setModel(key){
+  model=MODELS[key].build(); leds=model.leds;
+  document.getElementById('status').textContent = leds.length+' leds · '+MODELS[key].label+' · idx 0…'+(leds.length-1);
+}
+setModel('ring241');
+
+// ---- DOM / controls -----------------------------------------------------
+const $ = id => document.getElementById(id);
+const stage=$('stage'), sctx=stage.getContext('2d');
+const SW=160, SH=120;                       // source sampling buffer
+const src=document.createElement('canvas'); src.width=SW; src.height=SH;
+const xc=src.getContext('2d',{willReadFrequently:true});
+const srcview=$('srcview'), vctx=srcview.getContext('2d');
+
+const C = {};
+['zoom','panx','pany','spin','rot','bri','gamma','size','glow'].forEach(k=>{
+  const el=$(k); const upd=()=>{ C[k]=+el.value; $(k+'_v').textContent=el.value; }; el.oninput=upd; upd();
+});
+['fit','polar','idx'].forEach(k=>{ const el=$(k); C[k]=el.checked; el.onchange=()=>C[k]=el.checked; });
+let sourceMode='nyan';
+$('source').onchange=e=>sourceMode=e.target.value;
+$('model').onchange=e=>setModel(e.target.value);
+
+// ---- Uploaded media -----------------------------------------------------
+let upImg=null, upVid=null;
+$('file').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const url=URL.createObjectURL(f);
+  upImg=null; upVid=null;
+  if(f.type.startsWith('video')){
+    upVid=document.createElement('video');
+    upVid.src=url; upVid.loop=true; upVid.muted=true; upVid.playsInline=true; upVid.play();
+  } else {
+    upImg=new Image(); upImg.src=url;           // animated GIF animates live in <img>
+  }
+  $('source').value='upload'; sourceMode='upload';
+};
+
+// ---- Source renderers ---------------------------------------------------
+function drawNyan(t){
+  xc.fillStyle='#1a0030'; xc.fillRect(0,0,SW,SH);
+  // scrolling star dots
+  xc.fillStyle='#fff';
+  for(let i=0;i<26;i++){ const x=((i*53 - t*40)%SW+SW)%SW; const y=(i*37)%SH; xc.fillRect(x,y,2,2); }
+  // rainbow trail (left side), 6 bands waving
+  const bands=['#ff0000','#ff9900','#ffff00','#33ff00','#0099ff','#6633ff'];
+  const bh=10, x0=0, trailW=84;
+  for(let b=0;b<6;b++){
+    xc.fillStyle=bands[b];
+    for(let x=x0;x<trailW;x+=6){
+      const wob=Math.round(Math.sin((x*0.10)-(t*6))*4);
+      xc.fillRect(x, 44+b*bh+wob, 6, bh);
+    }
+  }
+  // poptart body
+  const bob=Math.round(Math.sin(t*6)*3);
+  const bx=78, by=46+bob;
+  xc.fillStyle='#ffb6d5'; xc.fillRect(bx,by,40,30);           // pink frosting
+  xc.fillStyle='#9c5a3c'; xc.fillRect(bx,by,40,30);           // tart edge under
+  xc.fillStyle='#ffb0d0'; xc.fillRect(bx+3,by+3,34,24);       // frosting inset
+  xc.fillStyle='#ff3fa0';                                     // sprinkles
+  for(let i=0;i<10;i++) xc.fillRect(bx+6+((i*11)%30), by+6+((i*7)%18), 2,2);
+  // cat head
+  xc.fillStyle='#9aa0a6'; xc.fillRect(bx+30,by+2,16,18);      // grey head
+  xc.fillStyle='#000'; xc.fillRect(bx+30,by+1,3,3); xc.fillRect(bx+43,by+1,3,3); // ears
+  xc.fillStyle='#fff'; xc.fillRect(bx+34,by+7,3,3); xc.fillRect(bx+40,by+7,3,3); // eyes
+  xc.fillStyle='#000'; xc.fillRect(bx+35,by+8,1,1); xc.fillRect(bx+41,by+8,1,1);
+  xc.fillStyle='#ff7fb0'; xc.fillRect(bx+36,by+12,5,3);       // mouth
+  // legs
+  xc.fillStyle='#7d8288'; const lg=Math.round(Math.sin(t*9)*2);
+  xc.fillRect(bx+4,by+28+lg,4,4); xc.fillRect(bx+30,by+28-lg,4,4);
+}
+function drawRainbow(t){
+  for(let y=0;y<SH;y++){
+    const hue=((y/SH*360)+(t*60))%360;
+    xc.fillStyle='hsl('+hue+',100%,55%)'; xc.fillRect(0,y,SW,1);
+  }
+}
+function drawTestGrid(t){
+  xc.fillStyle='#000'; xc.fillRect(0,0,SW,SH);
+  for(let y=0;y<SH;y+=20) for(let x=0;x<SW;x+=20){
+    xc.fillStyle=((x/20+y/20)&1)?'#ff2d2d':'#2d6dff'; xc.fillRect(x,y,20,20);
+  }
+  xc.fillStyle='#fff'; xc.fillRect(SW/2-2,0,4,SH); xc.fillRect(0,SH/2-2,SW,4);
+  xc.fillStyle='#0f0'; xc.beginPath(); xc.arc(SW/2,SH/2,6,0,7); xc.fill();
+}
+function renderSource(t){
+  if(sourceMode==='upload'){
+    xc.fillStyle='#000'; xc.fillRect(0,0,SW,SH);
+    const m=upVid||upImg;
+    if(m){
+      const mw=m.videoWidth||m.naturalWidth||SW, mh=m.videoHeight||m.naturalHeight||SH;
+      // contain into source buffer keeping aspect
+      const s=Math.min(SW/mw,SH/mh), dw=mw*s, dh=mh*s;
+      try{ xc.drawImage(m,(SW-dw)/2,(SH-dh)/2,dw,dh); }catch(e){}
+    }
+    return;
+  }
+  if(sourceMode==='nyan') drawNyan(t);
+  else if(sourceMode==='rainbow') drawRainbow(t);
+  else drawTestGrid(t);
+}
+
+// ---- gamma LUT ----------------------------------------------------------
+let gLUT=new Uint8Array(256), lastG=-1;
+function lut(g){ if(g===lastG)return; lastG=g; for(let i=0;i<256;i++) gLUT[i]=Math.round(255*Math.pow(i/255,g)); }
+
+// ---- main loop ----------------------------------------------------------
+let spinAng=0, prevT=0;
+function frame(ms){
+  const t=ms/1000; const dt=t-prevT; prevT=t;
+  renderSource(t);
+  vctx.drawImage(src,0,0,srcview.width,srcview.height);     // little source preview
+  const img=xc.getImageData(0,0,SW,SH).data;
+
+  spinAng += (C.spin*Math.PI/180)*dt;
+  const ang=(C.rot*Math.PI/180)+spinAng;
+  const ca=Math.cos(ang), sa=Math.sin(ang);
+  const zoom=C.zoom/100, px=C.panx/100, py=C.pany/100;
+  lut(C.gamma/100);
+  const bri=C.bri/100;
+
+  // stage geometry — disc maps to a centred circle of radius Rpx
+  const Wd=stage.width, Hd=stage.height, pad=24;
+  const Rpx=Math.min(Wd,Hd)/2-pad, cxPix=Wd/2, cyPix=Hd/2;
+  const dotR=Math.max(1.2, model.pitchN*Rpx*0.5*(C.size/100));
+  sctx.fillStyle='#000'; sctx.fillRect(0,0,Wd,Hd);
+
+  for(const L of leds){
+    // sampling coords in source space
+    let u,v;
+    if(C.polar){
+      // wrap image: x=angle, y=radius
+      u=((L.a+ang)/(2*Math.PI)+0.5); v=L.r;
+      u=u-Math.floor(u);                       // repeat around
+    } else {
+      // planar projection with rotate/zoom/pan
+      let nx=L.nx, ny=L.ny;                     // -1..1 over disc
+      let rx=nx*ca-ny*sa, ry=nx*sa+ny*ca;
+      rx=rx/zoom - px; ry=ry/zoom - py;
+      // map -1..1 disc to image. fit=cover keeps aspect to fill, else 1:1
+      const aspect=SW/SH;
+      if(C.fit){ u=(rx*0.5)+0.5; v=(ry/aspect*0.5)+0.5; }
+      else { u=(rx*0.5)+0.5; v=(ry*0.5)+0.5; }
+    }
+    let sx=Math.floor(u*SW), sy=Math.floor(v*SH);
+    let R=0,G=0,B=0;
+    if(sx>=0&&sx<SW&&sy>=0&&sy<SH){
+      const p=(sy*SW+sx)*4; R=img[p]; G=img[p+1]; B=img[p+2];
+    }
+    R=gLUT[R]*bri; G=gLUT[G]*bri; B=gLUT[B]*bri;
+    R=Math.min(255,R)|0; G=Math.min(255,G)|0; B=Math.min(255,B)|0;
+
+    const x=cxPix+L.nx*Rpx, y=cyPix+L.ny*Rpx;
+    const lum=(R+G+B)/3;
+    if(C.glow>0 && lum>14){
+      sctx.shadowColor='rgb('+R+','+G+','+B+')';
+      sctx.shadowBlur=dotR*(C.glow/100)*2.2;
+    } else sctx.shadowBlur=0;
+    sctx.fillStyle='rgb('+R+','+G+','+B+')';
+    sctx.beginPath(); sctx.arc(x,y,dotR,0,7); sctx.fill();
+    sctx.shadowBlur=0;
+    if(C.idx){ sctx.fillStyle='rgba(255,255,255,.6)'; sctx.font=Math.max(6,dotR*1.3|0)+'px monospace';
+      sctx.textAlign='center'; sctx.fillText(L.idx,x,y+dotR*0.4); }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ---- export -------------------------------------------------------------
+$('snap').onclick=()=>{ const a=document.createElement('a'); a.download='ring241.png'; a.href=stage.toDataURL(); a.click(); };
+
+let rec=null, chunks=[];
+$('rec').onclick=()=>{
+  const btn=$('rec');
+  if(rec){ rec.stop(); return; }
+  const stream=stage.captureStream(30);
+  rec=new MediaRecorder(stream,{mimeType:'video/webm'});
+  chunks=[]; rec.ondataavailable=e=>chunks.push(e.data);
+  rec.onstop=()=>{ const b=new Blob(chunks,{type:'video/webm'}); const a=document.createElement('a');
+    a.download='ring241.webm'; a.href=URL.createObjectURL(b); a.click(); rec=null; btn.textContent='Opname GIF/webm'; btn.classList.add('primary'); };
+  rec.start(); btn.textContent='⏹ Stop opname'; btn.classList.remove('primary');
+};
+</script>
+</body>
+</html>
