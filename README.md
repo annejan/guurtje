@@ -36,19 +36,42 @@ angle) — center to rim — for both lamps. StopNu's *actual* WS2812 wiring ord
 | **Ring241** | 241 | [MoonModules MM-Effects `Ring241 2D33.json`](https://github.com/MoonModules/MM-Effects/blob/master/Ledmaps/Ring241/Ring241%202D33.json) WLED 2D ledmap (33×33 grid) |
 | **Bornhack StopNu** | 405 | [badgeteam BH20XX-StopNu](https://github.com/badgeteam/BH20XX-StopNu) PCB component-placement coords (`..._top_cpl.csv`), 12 rings, idx 1–405 |
 
-Both feed a unified per-LED struct `{idx, nx, ny, r, a}` (normalised disc
-coords, screen frame), so the renderer and image sampler are model-agnostic.
-Adding a model = one entry in the `MODELS` registry (a grid ledmap → 
-`buildFromGrid`, or real x/y coords → `buildFromCoords`).
+Both feed a unified per-LED struct `{idx, nx, ny, r, a, rank, ringIx}`
+(normalised disc coords + spiral rank), so the renderer, image sampler and
+geometry effects are all model-agnostic.
+
+### Load any disc (auto-detect)
+
+Drop a file into **Model → load**; the format is sniffed automatically:
+
+| File | Detected as | Builder |
+|------|-------------|---------|
+| WLED `ledmap.json` (`{width,map}` or bare array) | grid | `buildFromGrid` |
+| Coords `.csv` with `x,y` (+ optional index) | coords | `buildFromCoords` |
+| KiCad/EDA placement `.csv` (`Designator,Mid X,Mid Y`) | CPL | `buildFromCoords` |
+| Ring-spec `.csv` (`count` + `radius`/`straal` per ring) | ring spec | `buildFromRingSpec` |
+
+Adding a built-in model is still one entry in the `MODELS` registry.
 
 ## Features
 
 - Built-in **Nyan Cat** (procedural, no CORS hassle), rainbow, calibration grid
 - **Drop your own** GIF / image / video → projected onto the disc (animated GIFs animate live)
+- **Geometry effects** (no image, computed per-LED from disc geometry): spiral
+  chase, rainbow **rings** pulse, rotating **conic** rainbow — work on any model
+- **Gridify** button: rasterise any disc to a square WLED 2D grid in one click
 - Projection: zoom, pan, spin, angle, cover/1:1, **polar wrap** (image wound around the rings)
 - LED look: brightness, gamma, dot size, glow, index overlay
 - Export: PNG snapshot · WebM recording · **WLED `ledmap.json`** (rasterises the
   disc to a 2D grid) · raw `coords.csv`
+
+### Grid a disc · rainbow-ring a disc
+
+![Bornhack StopNu rasterised to a 37×37 grid](preview/bornhack_grid_testgrid.png)
+![Rainbow rings on the Ring241 / Ali disc](preview/ali_rainbow_rings.gif)
+
+*Left: StopNu's 405 LEDs gridified onto a 37×37 WLED matrix (0 collisions).
+Right: the `rings` geometry effect — concentric rainbow — on the Ring241 disc.*
 
 ### Driving real WLED
 
@@ -68,5 +91,6 @@ image/GIF effect) plays on the disc.
 - To drive hardware: upload the matching ledmap into WLED (Config → 2D →
   Set up ledmap). Vanilla WLED has no native GIF playback; use WLED-MM's image
   effect for that.
-- StopNu has no rectangular grid ledmap yet — would need rasterising the coords
-  onto a grid for WLED 2D. Not done.
+- StopNu (and any coord-based disc) can be turned into a rectangular WLED 2D
+  grid via the **Gridify** button or the **ledmap.json** export — StopNu
+  rasterises to 37×37 with 0 collisions.

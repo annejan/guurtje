@@ -47,6 +47,9 @@
         <option value="stopnu">Bornhack StopNu — PCB coords (405 leds)</option>
       </select>
     </div>
+    <div class="row"><input type="file" id="modelfile" accept=".json,.csv,.txt" style="flex:1"></div>
+    <div class="note">Laad eigen disc: WLED <b>ledmap.json</b> · <b>coords/CPL .csv</b> (x,y of Mid X/Y) · <b>ring-spec .csv</b> (count+radius). Auto-detect.</div>
+    <div class="row"><button id="gridify" style="flex:1">⊞ Grid dit model (rasteriseer → WLED 2D)</button></div>
 
     <h2 style="margin-top:14px">Bron</h2>
     <div class="row">
@@ -54,6 +57,9 @@
         <option value="nyan">Nyan Cat (ingebouwd)</option>
         <option value="rainbow">Rainbow spin</option>
         <option value="testgrid">Test grid / kalibratie</option>
+        <option value="spiral">Spiraal chase (geometrie)</option>
+        <option value="rings">Ringen puls (geometrie)</option>
+        <option value="conic">Conische regenboog</option>
         <option value="upload">Geüpload bestand</option>
       </select>
     </div>
@@ -143,23 +149,53 @@ function meanNearestNeighbor(L){
   }
   return n? sum/n : 0.1;
 }
+// finalize: add pitchN + a continuous spiral ordering (ring-bucket by radius,
+// then by angle) usable by any model. Each led gets ringIx, aPos(0..2pi), rank(0..1).
+function finalize(L){
+  const pitchN=meanNearestNeighbor(L)||0.1;
+  for(const o of L){ let a=o.a; if(a<0) a+=2*Math.PI; o.aPos=a; o.ringIx=Math.round(o.r/pitchN); }
+  const order=[...L].sort((p,q)=> (p.ringIx-q.ringIx) || (p.aPos-q.aPos));
+  const n=order.length||1; order.forEach((o,k)=> o.rank=k/(n-1||1));
+  return { leds:L, pitchN };
+}
 function buildFromGrid(spec){               // WLED 2D ledmap: map[row*W+col]=idx, -1=gap
   const W=spec.width, H=spec.height, L=[];
   for(let r=0;r<H;r++) for(let c=0;c<W;c++){ const v=spec.map[r*W+c]; if(v>=0) L.push({idx:v,col:c,row:r}); }
   const cx=(W-1)/2, cy=(H-1)/2; let maxR=1;
   for(const o of L){ const d=Math.hypot(o.col-cx,o.row-cy); if(d>maxR) maxR=d; }
   for(const o of L){ o.nx=(o.col-cx)/maxR; o.ny=(o.row-cy)/maxR; o.r=Math.hypot(o.nx,o.ny); o.a=Math.atan2(o.ny,o.nx); }
-  return { leds:L, pitchN:meanNearestNeighbor(L) };
+  return finalize(L);
 }
 function buildFromCoords(rows){             // [idx1based, x_mm, y_mm], +y up on PCB
   let maxR=1; for(const [,x,y] of rows){ const d=Math.hypot(x,y); if(d>maxR) maxR=d; }
   const L=rows.map(([idx,x,y])=>{ const nx=x/maxR, ny=-y/maxR;   // flip y -> screen down
-    return {idx:idx-1, nx, ny, r:Math.hypot(nx,ny), a:Math.atan2(ny,nx)}; });
-  return { leds:L, pitchN:meanNearestNeighbor(L) };
+    return {idx:(idx|0)-1, nx, ny, r:Math.hypot(nx,ny), a:Math.atan2(ny,nx)}; });
+  return finalize(L);
+}
+function buildFromRingSpec(rings){          // [{count, radius}] inner->outer; even angle/ring
+  const maxR=Math.max(1,...rings.map(r=>r.radius)); const L=[]; let idx=0;
+  for(const ring of rings){ const c=Math.round(ring.count), rr=ring.radius/maxR; if(c<=0) continue;
+    if(c===1){ L.push({idx:idx++, nx:0, ny:0, r:0, a:0}); continue; }
+    for(let k=0;k<c;k++){ const ang=-Math.PI/2 + 2*Math.PI*k/c;          // start top, CCW
+      const nx=rr*Math.cos(ang), ny=rr*Math.sin(ang);
+      L.push({idx:idx++, nx, ny, r:Math.hypot(nx,ny), a:Math.atan2(ny,nx)}); } }
+  return finalize(L);
 }
 const MODELS = {
   ring241:{ label:'Ring241 (WLED ledmap, 241)', build:()=>buildFromGrid(LEDMAP) },
   stopnu: { label:'Bornhack StopNu (PCB, 405)', build:()=>buildFromCoords(STOPNU) },
+};
+
+// ---- generic per-LED geometry effects (no image; use led geometry+rank) -
+function hsl2rgb(h,s,l){ h=(((h%360)+360)%360)/360; s/=100; l/=100;
+  const f=n=>{ const k=(n+h*12)%12, a=s*Math.min(l,1-l); return l-a*Math.max(-1,Math.min(k-3,9-k,1)); };
+  return [Math.round(f(0)*255),Math.round(f(8)*255),Math.round(f(4)*255)]; }
+const EFFECTS = {
+  spiral:(L,t)=>{ let p=L.rank - t*0.3; p-=Math.floor(p); const b=Math.pow(1-p,3);   // comet down the spiral
+    return hsl2rgb(L.rank*320 + t*50, 95, 8+b*54); },
+  rings:(L,t)=>{ const w=Math.sin(L.r*Math.PI*6 - t*3)*0.5+0.5;                       // outward ring pulse
+    return hsl2rgb(L.r*300 + t*30, 90, 8+w*w*54); },
+  conic:(L,t)=>hsl2rgb(L.aPos/(2*Math.PI)*360 + t*60, 95, 52),                        // rotating colour wheel
 };
 let leds=[], model=null, modelKey='ring241';
 function setModel(key){
@@ -205,6 +241,58 @@ const C = {};
 let sourceMode='nyan';
 $('source').onchange=e=>sourceMode=e.target.value;
 $('model').onchange=e=>setModel(e.target.value);
+
+// ---- Load any disc model from a file (auto-detect format) ---------------
+function loadModelText(text, name){
+  text=text.replace(/^﻿/,'').trim(); let built=null, kind='';
+  if(text[0]==='{' || text[0]==='['){                       // JSON -> WLED ledmap
+    const j=JSON.parse(text);
+    const spec=Array.isArray(j)?{map:j,width:Math.round(Math.sqrt(j.length)),height:Math.round(Math.sqrt(j.length))}:j;
+    if(spec.map && spec.width){ built=buildFromGrid(spec); kind='ledmap '+spec.width+'×'+spec.height; }
+    else throw new Error('JSON mist width/map');
+  } else {                                                   // CSV
+    const rows=text.split(/\r?\n/).filter(l=>l.trim()).map(l=>l.split(/[,;\t]/).map(s=>s.trim()));
+    const hdr=rows[0].map(s=>s.toLowerCase()), body=rows.slice(1);
+    const find=(...ns)=>{ for(const n of ns){ const i=hdr.findIndex(h=>h.includes(n)); if(i>=0) return i; } return -1; };
+    const xCol=()=>hdr.findIndex(h=>h==='x'||h.startsWith('x ')||h.startsWith('x_')||h.startsWith('x('));
+    const yCol=()=>hdr.findIndex(h=>h==='y'||h.startsWith('y ')||h.startsWith('y_')||h.startsWith('y('));
+    const cMX=find('mid x'), cMY=find('mid y'), cCount=find('gecorrigeerd','count','aantal','leds'), cRad=find('straal','radius');
+    if(cMX>=0 && cMY>=0){                                    // CPL: Designator, Mid X, Mid Y
+      const cD=find('designator','ref','name'), data=[];
+      body.forEach((r,i)=>{ const des=(cD>=0?r[cD]:'')||''; if(cD>=0 && !/^d/i.test(des)) return;
+        const x=parseFloat(r[cMX]), y=parseFloat(r[cMY]); if(isNaN(x)||isNaN(y)) return;
+        const m=des.match(/(\d+)/); data.push([m?+m[1]:i+1, x, y]); });
+      built=buildFromCoords(data); kind='CPL '+data.length+' leds';
+    } else if(xCol()>=0 && yCol()>=0){                       // generic x,y[,index]
+      const cx=xCol(), cy=yCol(), cI=find('index','idx','led','#'), data=[];
+      body.forEach((r,i)=>{ const x=parseFloat(r[cx]), y=parseFloat(r[cy]); if(isNaN(x)||isNaN(y)) return;
+        const id=cI>=0?parseInt(r[cI]):i+1; data.push([isNaN(id)?i+1:id, x, y]); });
+      built=buildFromCoords(data); kind='coords '+data.length+' leds';
+    } else if(cCount>=0 && cRad>=0){                         // ring-spec: count + radius/ring
+      const rings=[]; body.forEach(r=>{ const c=parseFloat(r[cCount]), rad=parseFloat(r[cRad]);
+        if(!isNaN(c)&&!isNaN(rad)) rings.push({count:c, radius:rad}); });
+      built=buildFromRingSpec(rings); kind='ring-spec '+rings.length+' ringen';
+    } else throw new Error('CSV niet herkend (verwacht Mid X/Y, of x/y, of count+radius)');
+  }
+  MODELS.custom={ label:name+' · '+kind, build:()=>built };
+  let opt=$('model').querySelector('option[value="custom"]');
+  if(!opt){ opt=document.createElement('option'); opt.value='custom'; $('model').appendChild(opt); }
+  opt.textContent='Eigen: '+name; $('model').value='custom'; setModel('custom');
+}
+$('modelfile').onchange=e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
+  rd.onload=()=>{ try{ loadModelText(String(rd.result), f.name.replace(/\.[^.]+$/,'')); }
+    catch(err){ $('status').textContent='Model laden mislukt: '+err.message; } };
+  rd.readAsText(f); };
+
+// ---- Gridify: rasterize active model to a WLED 2D grid and view it -------
+$('gridify').onclick=()=>{
+  const src=modelKey, {json,N,collisions}=buildLedmap(), built=buildFromGrid(json);
+  MODELS.customgrid={ label:(MODELS[src].label)+' → grid '+N+'×'+N, build:()=>built };
+  let opt=$('model').querySelector('option[value="customgrid"]');
+  if(!opt){ opt=document.createElement('option'); opt.value='customgrid'; $('model').appendChild(opt); }
+  opt.textContent='Grid van: '+src; $('model').value='customgrid'; setModel('customgrid');
+  $('status').textContent='grid '+N+'×'+N+' van '+src+' · '+collisions+' botsing(en) verplaatst';
+};
 
 // ---- Uploaded media -----------------------------------------------------
 let upImg=null, upVid=null;
@@ -295,9 +383,11 @@ function lut(g){ if(g===lastG)return; lastG=g; for(let i=0;i<256;i++) gLUT[i]=Ma
 
 // ---- render one deterministic frame at time t (seconds) -----------------
 function renderFrame(t){
-  renderSource(t);
-  vctx.drawImage(src,0,0,srcview.width,srcview.height);     // little source preview
-  const img=xc.getImageData(0,0,SW,SH).data;
+  const fx=EFFECTS[sourceMode];                            // geometry effect vs image source
+  let img=null;
+  if(!fx){ renderSource(t); vctx.drawImage(src,0,0,srcview.width,srcview.height);
+           img=xc.getImageData(0,0,SW,SH).data; }
+  else { vctx.fillStyle='#111'; vctx.fillRect(0,0,srcview.width,srcview.height); }
 
   const ang=(C.rot*Math.PI/180)+(C.spin*Math.PI/180)*t;    // spin = deg/s, integrates to spin*t
   const ca=Math.cos(ang), sa=Math.sin(ang);
@@ -312,28 +402,26 @@ function renderFrame(t){
   sctx.fillStyle='#000'; sctx.fillRect(0,0,Wd,Hd);
 
   for(const L of leds){
-    // sampling coords in source space
-    let u,v;
-    if(C.polar){
-      // wrap image: x=angle, y=radius
-      u=((L.a+ang)/(2*Math.PI)+0.5); v=L.r;
-      u=u-Math.floor(u);                       // repeat around
-    } else {
-      // planar projection with rotate/zoom/pan
-      let nx=L.nx, ny=L.ny;                     // -1..1 over disc
-      let rx=nx*ca-ny*sa, ry=nx*sa+ny*ca;
-      rx=rx/zoom - px; ry=ry/zoom - py;
-      // map -1..1 disc to image. fit=cover keeps aspect to fill, else 1:1
-      const aspect=SW/SH;
-      if(C.fit){ u=(rx*0.5)+0.5; v=(ry/aspect*0.5)+0.5; }
-      else { u=(rx*0.5)+0.5; v=(ry*0.5)+0.5; }
-    }
-    let sx=Math.floor(u*SW), sy=Math.floor(v*SH);
     let R=0,G=0,B=0;
-    if(sx>=0&&sx<SW&&sy>=0&&sy<SH){
-      const p=(sy*SW+sx)*4; R=img[p]; G=img[p+1]; B=img[p+2];
+    if(fx){                                    // geometry effect: colour straight from led+time
+      const c=fx(L,t); R=c[0]*bri; G=c[1]*bri; B=c[2]*bri;
+    } else {                                   // image source: project + sample
+      let u,v;
+      if(C.polar){
+        u=((L.a+ang)/(2*Math.PI)+0.5); v=L.r;  // wrap image: x=angle, y=radius
+        u=u-Math.floor(u);                     // repeat around
+      } else {
+        let nx=L.nx, ny=L.ny;                  // -1..1 over disc
+        let rx=nx*ca-ny*sa, ry=nx*sa+ny*ca;
+        rx=rx/zoom - px; ry=ry/zoom - py;
+        const aspect=SW/SH;                    // fit=cover keeps aspect to fill, else 1:1
+        if(C.fit){ u=(rx*0.5)+0.5; v=(ry/aspect*0.5)+0.5; }
+        else { u=(rx*0.5)+0.5; v=(ry*0.5)+0.5; }
+      }
+      const sx=Math.floor(u*SW), sy=Math.floor(v*SH);
+      if(sx>=0&&sx<SW&&sy>=0&&sy<SH){ const p=(sy*SW+sx)*4; R=img[p]; G=img[p+1]; B=img[p+2]; }
+      R=gLUT[R]*bri; G=gLUT[G]*bri; B=gLUT[B]*bri;
     }
-    R=gLUT[R]*bri; G=gLUT[G]*bri; B=gLUT[B]*bri;
     R=Math.min(255,R)|0; G=Math.min(255,G)|0; B=Math.min(255,B)|0;
 
     const x=cxPix+L.nx*Rpx, y=cyPix+L.ny*Rpx;
@@ -354,7 +442,7 @@ requestAnimationFrame(frame);
 window.renderFrame=renderFrame;                 // headless deterministic capture hook
 window.SIM={ setModel, leds:()=>leds, model:()=>model, C,
              setSource:m=>{ sourceMode=m; $('source').value=m; },
-             buildLedmap, render:renderFrame };
+             buildLedmap, loadModelText, render:renderFrame };
 
 // ---- export -------------------------------------------------------------
 $('snap').onclick=()=>{ const a=document.createElement('a'); a.download=modelKey+'.png'; a.href=stage.toDataURL(); a.click(); };
