@@ -86,6 +86,10 @@ realtime **DDP/DNRGB**, the WLED **JSON API** (curl), or **direct hardware SPI**
 on a Raspberry Pi — see **[hardware/HARDWARE.md](hardware/HARDWARE.md)** and
 `hardware/disc_driver.py` (reads the coords in [`data/`](data/)).
 
+For a **drop-in WLED bundle** (ledmap + 10 disc-tuned presets) for the Ring241 /
+AliExpress 241-LED disc, see **[wled/ring241/](wled/ring241/)** — upload two files
+with `curl`, set the matrix to 33×33, done.
+
 ## Notes / TODO
 
 - **StopNu uses real PCB coordinates** — start angle and winding are already
