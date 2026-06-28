@@ -12,6 +12,10 @@ Open **`ring241-sim.html`** in any browser. Single file, no build, works offline
 
 *Nyan Cat projected on the 405-LED StopNu disc — rendered from the actual tool.*
 
+![Both lamps side by side](preview/both_lamps.gif)
+
+*Both supported lamps running the same source: Ring241 (241) vs StopNu (405).*
+
 | Test grid (calibration) | Rainbow, polar wrap | Ring241 (241 leds) |
 |---|---|---|
 | ![](preview/03_stopnu_testgrid.png) | ![](preview/04_stopnu_rainbow_polar.png) | ![](preview/01_ring241_nyan.png) |
