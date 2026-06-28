@@ -75,6 +75,20 @@ Adding a built-in model is still one entry in the `MODELS` registry.
 *Left: StopNu's 405 LEDs gridified onto a 37×37 WLED matrix (0 collisions).
 Right: the `rings` geometry effect — concentric rainbow — on the Ring241 disc.*
 
+### Two ways to run it — direct hardware *or* WLED
+
+The disc works either way; pick per use case:
+
+| | **WLED** (ESP runs it) | **Direct hardware** (you run it) |
+|---|---|---|
+| **Standalone, on-device** | Upload ledmap + presets, runs on the ESP alone — [`wled/ring241/`](wled/ring241/), [`wled/stopnu/`](wled/stopnu/) | Pi runs `disc_driver.py` on boot via systemd — [`hardware/disc.service`](hardware/disc.service) |
+| **Streamed from a PC/Pi** | `disc_driver.py --out ddp/dnrgb` → WLED realtime UDP | `disc_driver.py --out spi` → WS2812 straight off the Pi |
+| **This repo's exact effects/images** | stream them (WLED's own effects ≠ these) | yes, native |
+| **WLED's built-in effects** | yes (presets) | n/a |
+
+Same geometry effects (`spiral`, `rings`, `conic`) and image/GIF projection run in
+the browser sim *and* `hardware/disc_driver.py`, so the preview matches either path.
+
 ### Driving real hardware
 
 The **WLED ledmap.json** button rasterises the active model's LED positions onto
@@ -88,9 +102,9 @@ realtime **DDP/DNRGB**, the WLED **JSON API** (curl), or **direct hardware SPI**
 on a Raspberry Pi — see **[hardware/HARDWARE.md](hardware/HARDWARE.md)** and
 `hardware/disc_driver.py` (reads the coords in [`data/`](data/)).
 
-For a **drop-in WLED bundle** (ledmap + 10 disc-tuned presets) for the Ring241 /
-AliExpress 241-LED disc, see **[wled/ring241/](wled/ring241/)** — upload two files
-with `curl`, set the matrix to 33×33, done.
+**Drop-in WLED bundles** (ledmap + 10 disc-tuned presets), upload two files with
+`curl` and set the matrix: **[wled/ring241/](wled/ring241/)** (Ali 241, 33×33) and
+**[wled/stopnu/](wled/stopnu/)** (StopNu 405, 37×37).
 
 ## Notes / TODO
 

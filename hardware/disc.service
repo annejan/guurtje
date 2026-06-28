@@ -1,0 +1,28 @@
+# Standalone direct-hardware playback on a Raspberry Pi (no WLED, no connected PC).
+# Runs an effect on boot via hardware SPI. Install:
+#
+#   sudo cp disc.service /etc/systemd/system/disc.service
+#   # edit WorkingDirectory/ExecStart below to match where you cloned this repo
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now disc.service
+#   journalctl -u disc.service -f          # watch logs
+#
+# Change the effect/disc by editing ExecStart and `systemctl restart disc`.
+# For WLED instead of direct SPI, point --out ddp --host <wled-ip> and drop the SPI deps.
+
+[Unit]
+Description=Round LED disc playback (WS2812 over hardware SPI)
+After=multi-user.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/guurtje
+ExecStart=/usr/bin/python3 hardware/disc_driver.py \
+  --coords data/coords_stopnu.csv --effect rings \
+  --out spi --dither --fps 40 --brightness 0.5
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
