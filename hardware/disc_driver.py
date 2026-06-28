@@ -43,13 +43,13 @@ def load_coords(path):
     pts = np.stack([NX, NY], 1)
     d = np.sqrt(((pts[:, None, :] - pts[None, :, :]) ** 2).sum(2))
     np.fill_diagonal(d, np.inf)
-    step = d.min(1).mean() or 0.1
+    step = d.min(1).mean() or 0.1                          # mean LED spacing (normalised)
     ring = np.round(R / step).astype(int)
     order = sorted(range(n), key=lambda i: (ring[i], A[i]))
     rank = np.zeros(n)
     for k, i in enumerate(order):
         rank[i] = k / max(1, n - 1)
-    return dict(n=n, nx=NX, ny=NY, r=R, a=A, rank=rank)
+    return dict(n=n, nx=NX, ny=NY, r=R, a=A, rank=rank, pitch=step)
 
 # --------------------------------------------------------------- colour ----
 def hsl2rgb(h, s, l):                                   # arrays in deg,%,% -> Nx3 0..255
@@ -78,22 +78,36 @@ EFFECTS = {"spiral": fx_spiral, "rings": fx_rings, "conic": fx_conic}
 
 # ----------------------------------------------------------- image source --
 class ImageSource:
-    """Project an image / animated GIF onto the disc (planar cover, +y up)."""
-    def __init__(self, path):
+    """Project an image / animated GIF onto the disc (planar cover, +y up).
+
+    filt: 'nearest' (1 source pixel per LED — aliases on a sparse disc),
+          'bilinear' (sub-pixel 4-tap), or 'area' (gaussian pre-blur sized to the
+          LED footprint, then bilinear — proper anti-aliased downsample)."""
+    def __init__(self, path, filt="area"):
         from PIL import Image
         self.im = Image.open(path); self.frames = getattr(self.im, "n_frames", 1)
+        self.filt = filt
 
     def colours(self, m, fno):
-        from PIL import Image
+        from PIL import Image, ImageFilter
         self.im.seek(fno % self.frames)
-        fr = self.im.convert("RGB")
-        W, H = fr.size; px = np.asarray(fr)
+        fr = self.im.convert("RGB"); W, H = fr.size
+        if self.filt == "area":                          # blur to the per-LED footprint first
+            foot = max(0.5, m["pitch"] * W * 0.5)
+            fr = fr.filter(ImageFilter.GaussianBlur(foot))
+        px = np.asarray(fr).astype(np.float32)
         asp = W / H
         u = (m["nx"] * 0.5 + 0.5)
-        v = (m["ny"] / asp * 0.5 + 0.5)                 # ny already screen-down, matches sim
-        sx = np.clip((u * W).astype(int), 0, W - 1)
-        sy = np.clip((v * H).astype(int), 0, H - 1)
-        return px[sy, sx]
+        v = (m["ny"] / asp * 0.5 + 0.5)                  # ny already screen-down, matches sim
+        X = np.clip(u * (W - 1), 0, W - 1); Y = np.clip(v * (H - 1), 0, H - 1)
+        if self.filt == "nearest":
+            return px[np.round(Y).astype(int), np.round(X).astype(int)].astype(np.uint8)
+        x0 = np.floor(X).astype(int); y0 = np.floor(Y).astype(int)       # bilinear
+        x1 = np.clip(x0 + 1, 0, W - 1); y1 = np.clip(y0 + 1, 0, H - 1)
+        fx = (X - x0)[:, None]; fy = (Y - y0)[:, None]
+        a = px[y0, x0]; b = px[y0, x1]; c = px[y1, x0]; d = px[y1, x1]
+        out = (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy
+        return out.clip(0, 255).astype(np.uint8)
 
 # -------------------------------------------------------------- backends ---
 def send_ddp(sock, host, rgb):
@@ -137,6 +151,8 @@ def main():
     ap.add_argument("--coords", required=True)
     ap.add_argument("--effect", choices=list(EFFECTS))
     ap.add_argument("--image", help="image or animated GIF to project")
+    ap.add_argument("--filter", choices=["nearest", "bilinear", "area"], default="area",
+                    help="image sampling: area = anti-aliased downsample (default)")
     ap.add_argument("--out", required=True,
                     choices=["ddp", "dnrgb", "wled-json", "spi", "preview"])
     ap.add_argument("--host", default="wled.local")
@@ -161,7 +177,7 @@ def main():
     residual = None                                          # temporal dither carry
 
     m = load_coords(a.coords)
-    src = ImageSource(a.image) if a.image else None
+    src = ImageSource(a.image, a.filter) if a.image else None
     print("disc: %d leds from %s" % (m["n"], a.coords), file=sys.stderr)
 
     sock = None

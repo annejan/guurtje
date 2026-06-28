@@ -74,6 +74,7 @@
     <div class="row"><label>Hoek °</label><input type="range" id="rot" min="0" max="360" value="0"><span class="val" id="rot_v"></span></div>
     <div class="chk"><input type="checkbox" id="fit" checked><label for="fit" style="width:auto">Vul de disc (cover) — anders 1:1</label></div>
     <div class="chk"><input type="checkbox" id="polar"><label for="polar" style="width:auto">Polair wikkelen (beeld om ringen)</label></div>
+    <div class="chk"><input type="checkbox" id="aa" checked><label for="aa" style="width:auto">Sub-pixel / anti-alias (bilinear + footprint)</label></div>
 
     <h2 style="margin-top:14px">LED look</h2>
     <div class="row"><label>Helderheid</label><input type="range" id="bri" min="5" max="200" value="100"><span class="val" id="bri_v"></span></div>
@@ -231,13 +232,15 @@ const stage=$('stage'), sctx=stage.getContext('2d');
 const SW=160, SH=120;                       // source sampling buffer
 const src=document.createElement('canvas'); src.width=SW; src.height=SH;
 const xc=src.getContext('2d',{willReadFrequently:true});
+const srcAA=document.createElement('canvas'); srcAA.width=SW; srcAA.height=SH;   // footprint-blurred copy for AA
+const xa=srcAA.getContext('2d',{willReadFrequently:true});
 const srcview=$('srcview'), vctx=srcview.getContext('2d');
 
 const C = {};
 ['zoom','panx','pany','spin','rot','bri','gamma','size','glow'].forEach(k=>{
   const el=$(k); const upd=()=>{ C[k]=+el.value; $(k+'_v').textContent=el.value; }; el.oninput=upd; upd();
 });
-['fit','polar','idx'].forEach(k=>{ const el=$(k); C[k]=el.checked; el.onchange=()=>C[k]=el.checked; });
+['fit','polar','idx','aa'].forEach(k=>{ const el=$(k); C[k]=el.checked; el.onchange=()=>C[k]=el.checked; });
 let sourceMode='nyan';
 $('source').onchange=e=>sourceMode=e.target.value;
 $('model').onchange=e=>setModel(e.target.value);
@@ -386,7 +389,10 @@ function renderFrame(t){
   const fx=EFFECTS[sourceMode];                            // geometry effect vs image source
   let img=null;
   if(!fx){ renderSource(t); vctx.drawImage(src,0,0,srcview.width,srcview.height);
-           img=xc.getImageData(0,0,SW,SH).data; }
+           if(C.aa){ const foot=Math.max(0.5, model.pitchN*SW*0.5);   // blur to LED footprint -> area AA
+             xa.clearRect(0,0,SW,SH); xa.filter='blur('+foot+'px)'; xa.drawImage(src,0,0); xa.filter='none';
+             img=xa.getImageData(0,0,SW,SH).data; }
+           else img=xc.getImageData(0,0,SW,SH).data; }
   else { vctx.fillStyle='#111'; vctx.fillRect(0,0,srcview.width,srcview.height); }
 
   const ang=(C.rot*Math.PI/180)+(C.spin*Math.PI/180)*t;    // spin = deg/s, integrates to spin*t
@@ -418,8 +424,18 @@ function renderFrame(t){
         if(C.fit){ u=(rx*0.5)+0.5; v=(ry/aspect*0.5)+0.5; }
         else { u=(rx*0.5)+0.5; v=(ry*0.5)+0.5; }
       }
-      const sx=Math.floor(u*SW), sy=Math.floor(v*SH);
-      if(sx>=0&&sx<SW&&sy>=0&&sy<SH){ const p=(sy*SW+sx)*4; R=img[p]; G=img[p+1]; B=img[p+2]; }
+      if(u>=0&&u<=1&&v>=0&&v<=1){
+        if(C.aa){                                  // bilinear sub-pixel tap
+          const fX=Math.min(SW-1,Math.max(0,u*(SW-1))), fY=Math.min(SH-1,Math.max(0,v*(SH-1)));
+          const x0=fX|0, y0=fY|0, x1=Math.min(SW-1,x0+1), y1=Math.min(SH-1,y0+1), dx=fX-x0, dy=fY-y0;
+          const p00=(y0*SW+x0)*4, p10=(y0*SW+x1)*4, p01=(y1*SW+x0)*4, p11=(y1*SW+x1)*4;
+          const lerp=o=>(img[p00+o]*(1-dx)+img[p10+o]*dx)*(1-dy)+(img[p01+o]*(1-dx)+img[p11+o]*dx)*dy;
+          R=lerp(0)|0; G=lerp(1)|0; B=lerp(2)|0;     // int index for gLUT
+
+        } else {
+          const sx=u*SW|0, sy=v*SH|0; const p=(sy*SW+sx)*4; R=img[p]; G=img[p+1]; B=img[p+2];
+        }
+      }
       R=gLUT[R]*bri; G=gLUT[G]*bri; B=gLUT[B]*bri;
     }
     R=Math.min(255,R)|0; G=Math.min(255,G)|0; B=Math.min(255,B)|0;

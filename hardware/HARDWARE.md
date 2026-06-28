@@ -97,6 +97,29 @@ python3 disc_driver.py --coords ../data/coords_stopnu.csv --effect rings --out d
 The browser sim has its own **gamma** slider (and brightness/glow) so you can
 preview roughly how a fade lands before wiring.
 
+## Sub-pixel rendering (sampling)
+
+A disc has ~20 LEDs across a 256-px image, so **nearest-neighbour sampling throws
+away ~99% of the picture and aliases** — fine detail turns into false rings /
+moiré. `disc_driver.py --filter` (and the sim's *Sub-pixel / anti-alias* toggle)
+fix this:
+
+- `nearest` — one source pixel per LED. Fast, aliases.
+- `bilinear` — 4-tap sub-pixel; smoother edges/motion, but still aliases fine detail.
+- `area` *(default)* — Gaussian pre-blur sized to each LED's footprint, then
+  bilinear. Proper anti-aliased downsample: unresolvable detail averages to its
+  true tone instead of inventing rings.
+
+![nearest vs area on a zone plate](../assets/subpixel_zone.png)
+
+*Source zone plate · nearest (false rings) · area (honest average). The disc
+physically can't resolve the fine outer rings, so `area` shows their mean — which
+is what the real LEDs do.*
+
+Pairs well with `--dither`: area sampling fixes *spatial* detail, temporal dither
+fixes *brightness* quantisation. For slow pans the two together make motion look
+finer than the LED pitch.
+
 ## Power (read this)
 
 WS2812 ≈ 60 mA/LED at full white:
