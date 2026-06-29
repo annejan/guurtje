@@ -32,6 +32,16 @@ angle) — center to rim — for both lamps. StopNu's *actual* WS2812 wiring ord
 |---|---|---|
 | ![](preview/03_stopnu_testgrid.png) | ![](preview/04_stopnu_rainbow_polar.png) | ![](preview/01_ring241_nyan.png) |
 
+### ぐるぐる — the namesake swirl
+
+![ぐるぐる guru swirl on both lamps](preview/guru_both.gif)
+
+*The `guru` geometry effect: a two-armed rainbow vortex spinning inward — on
+both lamps at once (Ring241 left, StopNu right). The name **Guurtje** is an old
+Dutch name and a pun on **ぐるぐる** (*guruguru* — "round and round, spinning"),
+so this is the project's signature effect. Identical maths in the browser sim and
+in `disc_driver.py`; pick it from the source dropdown or `--effect guru`.*
+
 ## Models
 
 | Model | LEDs | Geometry source |
@@ -61,7 +71,8 @@ Adding a built-in model is still one entry in the `MODELS` registry.
 - Built-in **Nyan Cat** (procedural, no CORS hassle), rainbow, calibration grid
 - **Drop your own** GIF / image / video → projected onto the disc (animated GIFs animate live)
 - **Geometry effects** (no image, computed per-LED from disc geometry): spiral
-  chase, rainbow **rings** pulse, rotating **conic** rainbow — work on any model
+  chase, rainbow **rings** pulse, rotating **conic** rainbow, **ぐるぐる**
+  (`guru`) spinning vortex — work on any model
 - **Gridify** button: rasterise any disc to a square WLED 2D grid in one click
 - Projection: zoom, pan, spin, angle, cover/1:1, **polar wrap** (image wound around the rings)
 - LED look: brightness, gamma, dot size, glow, index overlay
@@ -87,8 +98,8 @@ The disc works either way; pick per use case:
 | **This repo's exact effects/images** | stream them (WLED's own effects ≠ these) | yes, native |
 | **WLED's built-in effects** | yes (presets) | n/a |
 
-Same geometry effects (`spiral`, `rings`, `conic`) and image/GIF projection run in
-the browser sim *and* `hardware/disc_driver.py`, so the preview matches either path.
+Same geometry effects (`spiral`, `rings`, `conic`, `guru`) and image/GIF projection
+run in the browser sim *and* `hardware/disc_driver.py`, so the preview matches either path.
 
 ### Driving real hardware
 

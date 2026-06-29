@@ -60,6 +60,7 @@
         <option value="spiral">Spiraal chase (geometrie)</option>
         <option value="rings">Ringen puls (geometrie)</option>
         <option value="conic">Conische regenboog</option>
+        <option value="guru">ぐるぐる swirl (guru)</option>
         <option value="upload">Geüpload bestand</option>
       </select>
     </div>
@@ -197,6 +198,8 @@ const EFFECTS = {
   rings:(L,t)=>{ const w=Math.sin(L.r*Math.PI*6 - t*3)*0.5+0.5;                       // outward ring pulse
     return hsl2rgb(L.r*300 + t*30, 90, 8+w*w*54); },
   conic:(L,t)=>hsl2rgb(L.aPos/(2*Math.PI)*360 + t*60, 95, 52),                        // rotating colour wheel
+  guru:(L,t)=>{ const arm=0.5+0.5*Math.sin(2*L.aPos - 9*L.r + t*2.6);                  // ぐるぐる — spinning vortex (namesake)
+    return hsl2rgb(L.aPos/(2*Math.PI)*360 - t*70 + L.r*90, 95, 10+arm*54); },
 };
 let leds=[], model=null, modelKey='ring241';
 function setModel(key){

@@ -22,7 +22,7 @@ python3 disc_driver.py --coords ../data/coords_stopnu.csv --effect rings --out d
 python3 disc_driver.py --coords ../data/coords_stopnu.csv --image nyan.gif --out spi
 ```
 
-Effects: `spiral`, `rings`, `conic` (identical maths to the browser sim). Or
+Effects: `spiral`, `rings`, `conic`, `guru` (identical maths to the browser sim). Or
 `--image file.png|file.gif` to project/animate any picture.
 
 ## Route A — WLED

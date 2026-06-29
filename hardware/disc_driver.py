@@ -74,7 +74,13 @@ def fx_conic(m, t):
     return hsl2rgb(m["a"] / (2 * math.pi) * 360 + t * 60,
                    np.full(m["n"], 95.0), np.full(m["n"], 52.0))
 
-EFFECTS = {"spiral": fx_spiral, "rings": fx_rings, "conic": fx_conic}
+def fx_guru(m, t):                                       # ぐるぐる — spinning spiral vortex
+    s = 2 * m["a"] - 9 * m["r"] + t * 2.6                # 2 arms winding inward, rotating
+    arm = 0.5 + 0.5 * np.sin(s)
+    hue = m["a"] / (2 * math.pi) * 360 - t * 70 + m["r"] * 90
+    return hsl2rgb(hue, np.full(m["n"], 95.0), 10 + arm * 54)
+
+EFFECTS = {"spiral": fx_spiral, "rings": fx_rings, "conic": fx_conic, "guru": fx_guru}
 
 # ----------------------------------------------------------- image source --
 class ImageSource:
