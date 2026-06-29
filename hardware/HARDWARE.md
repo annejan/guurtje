@@ -71,56 +71,20 @@ Wiring (Raspberry Pi):
 - 3.3 V→5 V data: a level shifter (74AHCT125) is the safe option; short runs often
   work direct. ESP32 alternative: its RMT/SPI peripheral + the same `--out` over wifi.
 
-## Colour depth — these are 24-bit LEDs
+## Colour depth, gamma, dithering, sub-pixel
 
-WS2812 are **24-bit, 8/8/8, GRB** — 16.7M colours but only **256 steps per
-channel**. Two things follow:
-
-- **Gamma.** The LED PWM is linear, your eye is not. Without gamma correction,
-  mid-tones look too bright and dim fades band. `disc_driver.py` applies a gamma
-  LUT — default **2.2 for `spi`/`preview`**, **1.0 for the WLED backends** (WLED
-  does its own brightness + optional gamma; don't double it). Override with
-  `--gamma`.
-- **Low end.** Below ~10/255 WS2812 have few distinct levels and shift colour.
-  `--dither` adds temporal error-diffusion: a target of 5.4/255 is sent as a
-  5/6/5/6… sequence that *averages* to 5.4, recovering sub-LSB brightness and
-  killing visible steps in slow dim fades. Costs nothing, needs a steady frame
-  rate.
+These are **24-bit, 8/8/8, GRB** LEDs on a sparse disc, so sampling, gamma and
+8-bit quantisation all matter. That's its own topic — see **[../RENDERING.md](../RENDERING.md)**.
+Quick flag reference:
 
 ```bash
-# Pi/SPI: gamma-correct + dither for smooth dim gradients
+# Pi/SPI: gamma 2.2 + dither + adaptive anti-alias (defaults), smooth dim gradients
 python3 disc_driver.py --coords ../data/coords_stopnu.csv --effect rings --out spi --dither
-# DDP to WLED: let WLED do gamma, so keep it linear here
-python3 disc_driver.py --coords ../data/coords_stopnu.csv --effect rings --out ddp --host wled.local --gamma 1
+# DDP to WLED: keep it linear, WLED does its own gamma
+python3 disc_driver.py --coords ../data/coords_stopnu.csv --image nyan.gif --out ddp --host wled.local --gamma 1
 ```
 
-The browser sim has its own **gamma** slider (and brightness/glow) so you can
-preview roughly how a fade lands before wiring.
-
-## Sub-pixel rendering (sampling)
-
-A disc has ~20 LEDs across a 256-px image, so **nearest-neighbour sampling throws
-away ~99% of the picture and aliases** — fine detail turns into false rings /
-moiré. `disc_driver.py --filter` (and the sim's *Sub-pixel / anti-alias* toggle)
-fix this:
-
-- `nearest` — one source pixel per LED. Fast, aliases.
-- `bilinear` — 4-tap sub-pixel; smoother edges/motion, but still aliases fine detail.
-- `area` *(default)* — **adaptive**: a sharp centre sample, and the 3×3 footprint
-  is averaged in *only where those taps disagree* (an edge). Flat regions stay
-  pixel-crisp; only the genuinely ambiguous boundary LEDs are anti-aliased, and
-  even they keep 30% of the crisp value so bold graphics don't wash out.
-
-![flat stays sharp; only ambiguous edges blend](../assets/subpixel_zone.png)
-
-*nearest | area, for a flat cross and a zone plate. The cross interior is
-identical under `area` (flat → untouched); only its edge LEDs soften. The zone
-plate's fine outer rings — which the disc can't resolve — average to their true
-tone instead of aliasing into false rings.*
-
-Pairs well with `--dither`: area sampling fixes *spatial* detail, temporal dither
-fixes *brightness* quantisation. For slow pans the two together make motion look
-finer than the LED pitch.
+`--filter nearest|bilinear|area` · `--gamma G` · `--dither`.
 
 ## Power (read this)
 
