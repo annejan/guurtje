@@ -106,15 +106,17 @@ fix this:
 
 - `nearest` — one source pixel per LED. Fast, aliases.
 - `bilinear` — 4-tap sub-pixel; smoother edges/motion, but still aliases fine detail.
-- `area` *(default)* — Gaussian pre-blur sized to each LED's footprint, then
-  bilinear. Proper anti-aliased downsample: unresolvable detail averages to its
-  true tone instead of inventing rings.
+- `area` *(default)* — **adaptive**: a sharp centre sample, and the 3×3 footprint
+  is averaged in *only where those taps disagree* (an edge). Flat regions stay
+  pixel-crisp; only the genuinely ambiguous boundary LEDs are anti-aliased, and
+  even they keep 30% of the crisp value so bold graphics don't wash out.
 
-![nearest vs area on a zone plate](../assets/subpixel_zone.png)
+![flat stays sharp; only ambiguous edges blend](../assets/subpixel_zone.png)
 
-*Source zone plate · nearest (false rings) · area (honest average). The disc
-physically can't resolve the fine outer rings, so `area` shows their mean — which
-is what the real LEDs do.*
+*nearest | area, for a flat cross and a zone plate. The cross interior is
+identical under `area` (flat → untouched); only its edge LEDs soften. The zone
+plate's fine outer rings — which the disc can't resolve — average to their true
+tone instead of aliasing into false rings.*
 
 Pairs well with `--dither`: area sampling fixes *spatial* detail, temporal dither
 fixes *brightness* quantisation. For slow pans the two together make motion look

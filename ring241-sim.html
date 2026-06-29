@@ -232,8 +232,6 @@ const stage=$('stage'), sctx=stage.getContext('2d');
 const SW=160, SH=120;                       // source sampling buffer
 const src=document.createElement('canvas'); src.width=SW; src.height=SH;
 const xc=src.getContext('2d',{willReadFrequently:true});
-const srcAA=document.createElement('canvas'); srcAA.width=SW; srcAA.height=SH;   // footprint-blurred copy for AA
-const xa=srcAA.getContext('2d',{willReadFrequently:true});
 const srcview=$('srcview'), vctx=srcview.getContext('2d');
 
 const C = {};
@@ -389,11 +387,9 @@ function renderFrame(t){
   const fx=EFFECTS[sourceMode];                            // geometry effect vs image source
   let img=null;
   if(!fx){ renderSource(t); vctx.drawImage(src,0,0,srcview.width,srcview.height);
-           if(C.aa){ const foot=Math.max(0.5, model.pitchN*SW*0.5);   // blur to LED footprint -> area AA
-             xa.clearRect(0,0,SW,SH); xa.filter='blur('+foot+'px)'; xa.drawImage(src,0,0); xa.filter='none';
-             img=xa.getImageData(0,0,SW,SH).data; }
-           else img=xc.getImageData(0,0,SW,SH).data; }
+           img=xc.getImageData(0,0,SW,SH).data; }
   else { vctx.fillStyle='#111'; vctx.fillRect(0,0,srcview.width,srcview.height); }
+  const aaFoot=Math.max(0.6, (model.pitchN*SW)*0.33);  // adaptive-AA tap offset (~1/3 LED spacing)
 
   const ang=(C.rot*Math.PI/180)+(C.spin*Math.PI/180)*t;    // spin = deg/s, integrates to spin*t
   const ca=Math.cos(ang), sa=Math.sin(ang);
@@ -425,13 +421,22 @@ function renderFrame(t){
         else { u=(rx*0.5)+0.5; v=(ry*0.5)+0.5; }
       }
       if(u>=0&&u<=1&&v>=0&&v<=1){
-        if(C.aa){                                  // bilinear sub-pixel tap
-          const fX=Math.min(SW-1,Math.max(0,u*(SW-1))), fY=Math.min(SH-1,Math.max(0,v*(SH-1)));
-          const x0=fX|0, y0=fY|0, x1=Math.min(SW-1,x0+1), y1=Math.min(SH-1,y0+1), dx=fX-x0, dy=fY-y0;
-          const p00=(y0*SW+x0)*4, p10=(y0*SW+x1)*4, p01=(y1*SW+x0)*4, p11=(y1*SW+x1)*4;
-          const lerp=o=>(img[p00+o]*(1-dx)+img[p10+o]*dx)*(1-dy)+(img[p01+o]*(1-dx)+img[p11+o]*dx)*dy;
-          R=lerp(0)|0; G=lerp(1)|0; B=lerp(2)|0;     // int index for gLUT
-
+        if(C.aa){                                  // adaptive AA: sharp unless footprint straddles an edge
+          const bX=Math.min(SW-1,Math.max(0,u*(SW-1))), bY=Math.min(SH-1,Math.max(0,v*(SH-1)));
+          let sr=0,sg=0,sb=0, cr=0,cg=0,cb=0, mxr=0,mxg=0,mxb=0, mnr=255,mng=255,mnb=255;
+          for(let oy=-1;oy<=1;oy++) for(let ox=-1;ox<=1;ox++){
+            const fX=Math.min(SW-1,Math.max(0,bX+ox*aaFoot)), fY=Math.min(SH-1,Math.max(0,bY+oy*aaFoot));
+            const x0=fX|0,y0=fY|0,x1=Math.min(SW-1,x0+1),y1=Math.min(SH-1,y0+1),dx=fX-x0,dy=fY-y0;
+            const p00=(y0*SW+x0)*4,p10=(y0*SW+x1)*4,p01=(y1*SW+x0)*4,p11=(y1*SW+x1)*4;
+            const L=o=>(img[p00+o]*(1-dx)+img[p10+o]*dx)*(1-dy)+(img[p01+o]*(1-dx)+img[p11+o]*dx)*dy;
+            const r=L(0),g=L(1),b=L(2); sr+=r;sg+=g;sb+=b;
+            if(ox===0&&oy===0){cr=r;cg=g;cb=b;}
+            if(r>mxr)mxr=r; if(g>mxg)mxg=g; if(b>mxb)mxb=b;
+            if(r<mnr)mnr=r; if(g<mng)mng=g; if(b<mnb)mnb=b;
+          }
+          const rng=Math.max(mxr-mnr,mxg-mng,mxb-mnb)/255;
+          const w=Math.min(1,Math.max(0,(rng-0.10)/0.30))*0.7;  // 0 flat->sharp; edges keep 30% punch
+          R=(cr*(1-w)+(sr/9)*w)|0; G=(cg*(1-w)+(sg/9)*w)|0; B=(cb*(1-w)+(sb/9)*w)|0;
         } else {
           const sx=u*SW|0, sy=v*SH|0; const p=(sy*SW+sx)*4; R=img[p]; G=img[p+1]; B=img[p+2];
         }

@@ -81,20 +81,26 @@ class ImageSource:
     """Project an image / animated GIF onto the disc (planar cover, +y up).
 
     filt: 'nearest' (1 source pixel per LED — aliases on a sparse disc),
-          'bilinear' (sub-pixel 4-tap), or 'area' (gaussian pre-blur sized to the
-          LED footprint, then bilinear — proper anti-aliased downsample)."""
+          'bilinear' (sub-pixel 4-tap), or 'area' (ADAPTIVE: sharp centre sample,
+          and only average the LED footprint where it straddles an edge — flat
+          regions stay crisp, only ambiguous LEDs are anti-aliased)."""
     def __init__(self, path, filt="area"):
         from PIL import Image
         self.im = Image.open(path); self.frames = getattr(self.im, "n_frames", 1)
         self.filt = filt
 
+    @staticmethod
+    def _bil(px, X, Y, W, H):
+        x0 = np.clip(np.floor(X).astype(int), 0, W - 1); y0 = np.clip(np.floor(Y).astype(int), 0, H - 1)
+        x1 = np.clip(x0 + 1, 0, W - 1); y1 = np.clip(y0 + 1, 0, H - 1)
+        fx = (X - np.floor(X))[:, None]; fy = (Y - np.floor(Y))[:, None]
+        a = px[y0, x0]; b = px[y0, x1]; c = px[y1, x0]; d = px[y1, x1]
+        return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy
+
     def colours(self, m, fno):
-        from PIL import Image, ImageFilter
+        from PIL import Image
         self.im.seek(fno % self.frames)
         fr = self.im.convert("RGB"); W, H = fr.size
-        if self.filt == "area":                          # blur to the per-LED footprint first
-            foot = max(0.5, m["pitch"] * W * 0.5)
-            fr = fr.filter(ImageFilter.GaussianBlur(foot))
         px = np.asarray(fr).astype(np.float32)
         asp = W / H
         u = (m["nx"] * 0.5 + 0.5)
@@ -102,12 +108,18 @@ class ImageSource:
         X = np.clip(u * (W - 1), 0, W - 1); Y = np.clip(v * (H - 1), 0, H - 1)
         if self.filt == "nearest":
             return px[np.round(Y).astype(int), np.round(X).astype(int)].astype(np.uint8)
-        x0 = np.floor(X).astype(int); y0 = np.floor(Y).astype(int)       # bilinear
-        x1 = np.clip(x0 + 1, 0, W - 1); y1 = np.clip(y0 + 1, 0, H - 1)
-        fx = (X - x0)[:, None]; fy = (Y - y0)[:, None]
-        a = px[y0, x0]; b = px[y0, x1]; c = px[y1, x0]; d = px[y1, x1]
-        out = (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy
-        return out.clip(0, 255).astype(np.uint8)
+        center = self._bil(px, X, Y, W, H)
+        if self.filt == "bilinear":
+            return center.clip(0, 255).astype(np.uint8)
+        # adaptive area: 3x3 footprint taps, blend toward mean ONLY where they disagree
+        d = max(0.6, m["pitch"] * W * 0.33)              # tap offset ~1/3 LED spacing (stay in-cell)
+        taps = [self._bil(px, np.clip(X + ox * d, 0, W - 1), np.clip(Y + oy * d, 0, H - 1), W, H)
+                for oy in (-1, 0, 1) for ox in (-1, 0, 1)]
+        T = np.stack(taps, 0)                            # (9, N, 3)
+        mean = T.mean(0)
+        rng = (T.max(0) - T.min(0)).max(1) / 255.0       # ambiguity per LED (0..1)
+        w = (np.clip((rng - 0.10) / 0.30, 0, 1) * 0.7)[:, None]  # 0 flat (sharp); edges keep 30% punch
+        return (center * (1 - w) + mean * w).clip(0, 255).astype(np.uint8)
 
 # -------------------------------------------------------------- backends ---
 def send_ddp(sock, host, rgb):
